@@ -1,0 +1,17 @@
+# Restore state v1
+
+The scaffold performs no restore. A future restore is allowed only after complete stored-byte integrity, standard-envelope authentication/decryption when encrypted, and full archive/logical manifest verification. Unsupported plaintext metadata, unsafe paths or unknown required features block before target mutation. Cache writes are explicitly separate from target restoration.
+
+Require an actual qualified journal capability signal and maintenance quiescence, not an ext-family statfs magic, a volume label or a lock alone. Root remains uid 0; reconcile other accounts by name and remap ownership explicitly. Keep new reserved service identities. Account/group/shadow changes and SSH host-key pairs are recoverable units while logins/services remain stopped. Preserve a working rescue administrator until imported access is independently proven.
+
+For configuration compare old default, saved old state and new default/current state. Unchanged old local state keeps the new default; unchanged upstream proposes saved state; identical states need no action; both changed requires a reviewed keep-new/take-old/replacement decision. Deletions and additions are explicit path actions. Preserve the new disk identifiers and boot/login invariants. Never restore sudo authentication timestamps, live pid/lock data or old package transaction/trust databases.
+
+State lives under `var/lib/denward/` in the target: a persistent lock inode, immutable backup/target/plan identities, transaction intent, durable preimages and final commit authority. Every state record is versioned, length/checksum framed and validated before use. No unvalidated backup value chooses an undeclared state path or hook.
+
+Before replacing anything, write/sync its preimage copy and the ordered intent, including new parent directories. Use descriptor-relative no-follow operations, same-filesystem temporary inodes and checked write/chown/chmod/time application. Sync data before rename and affected parents after rename. Never treat a hard link to a mutable old file as an immutable preimage. Restore symlink text without traversal, hard links only to declared verified in-root destinations, sparse maps through a qualified API and directory times last.
+
+After a cut, compare actual file types/content/metadata with the approved old/new actions as well as completion records. A rename can precede its done marker. Reapply/finish idempotently while maintenance blocks login/services; recovery itself must survive another cut. A final durably renamed/synced commit record is the one authority selecting completed state. Corrupt/ambiguous state, wrong target/backup/plan or missing preimages stops in rescue, never a normal boot.
+
+A same-plan second restore verifies without destructive changes. Later local edits produce a new conflict rather than stale approval overwriting them. Keep preimages and both backup copies until explicit previewed cleanup after reboot/login/SSH identity checks. This is crash recovery under a qualified filesystem/device, not many-file atomic visibility, filesystem repair or protection against arbitrary media corruption.
+
+Power-cut tests must exercise data/directory sync, intents, renames, account/key transitions, final authority and recovery itself, with an independent disk/tree checker. Process-kill tests alone do not establish durability. The actual fresh journalled installer plus maintenance boot gate is a release prerequisite.
