@@ -45,6 +45,8 @@ def main():
     if digest(a.image) != JUDGE['IMAGE']:
         raise RuntimeError('test ISO digest mismatch')
     p = a.workspace.resolve()
+    if not re.fullmatch(r'[/A-Za-z0-9_.-]+', str(p)) or len(str(p / 'qmp.sock').encode()) > 100:
+        raise RuntimeError('probe workspace needs a short shell-safe absolute path')
     p.mkdir(parents=True, mode=0o700, exist_ok=False)
     (p / 'scratch').mkdir()
     os.environ['TMPDIR'] = str(p / 'scratch')
