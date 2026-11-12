@@ -1,0 +1,5 @@
+#!/bin/sh
+# Used only as the native Linux compiler driver, never for program execution.
+set -eu
+: "${DENWARD_REAL_CC:?a compiler driver is required}"
+exec "$DENWARD_REAL_CC" -static "$@"
