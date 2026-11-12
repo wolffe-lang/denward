@@ -1,0 +1,243 @@
+//! Refusal-only command grammar. No filesystem, process or network operations.
+
+use std.str as text
+
+struct Parsed {
+    keys: List[str],
+    values: List[str],
+    operands: List[str],
+    error: str,
+}
+
+fn contains(items: List[str], value: str) -> bool {
+    for item in items { if item == value { return true } }
+    false
+}
+
+fn value(p: Parsed, key: str) -> str {
+    for i in 0..p.keys.len { if p.keys[i] == key { return p.values[i] } }
+    ""
+}
+
+fn has(p: Parsed, key: str) -> bool { contains(p.keys, key) }
+
+fn parse(args: List[str], start: int, values: List[str], flags: List[str]) -> Parsed {
+    var p = Parsed {
+        keys: List[str](),
+        values: List[str](),
+        operands: List[str](),
+        error: "",
+    }
+    var i = start
+    var operands_only = false
+    while i < args.len {
+        let token = args[i]
+        if !operands_only && token == "--" {
+            operands_only = true
+        } else if !operands_only && text.starts_with(token, "-") {
+            if !contains(values, token) && !contains(flags, token) {
+                p.error = "unknown option"
+                return p
+            }
+            if contains(p.keys, token) { p.error = "duplicate option"; return p }
+            (mut p.keys).push(token)
+            if contains(values, token) {
+                if i + 1 >= args.len { p.error = "missing option value"; return p }
+                i += 1
+                if args[i] == "" || text.starts_with(args[i], "--") {
+                    p.error = "missing option value"
+                    return p
+                }
+                (mut p.values).push(args[i])
+            } else {
+                (mut p.values).push("true")
+            }
+        } else {
+            (mut p.operands).push(token)
+        }
+        i += 1
+    }
+    p
+}
+
+/// Canonical bounded decimal, without evaluating overflowing arithmetic.
+pub fn valid_number(s: str) -> bool {
+    let b = s.bytes()
+    if b.len == 0 || b.len > 19 { return false }
+    if b.len > 1 && b[0] == 48 as byte { return false }
+    var n = 0
+    for c in b {
+        let v = c as int
+        if v < 48 || v > 57 { return false }
+        let d = v - 48
+        if n > (9223372036854775807 - d) / 10 { return false }
+        n = n * 10 + d
+    }
+    true
+}
+
+/// Lowercase exact-byte SHA-256 spelling, not an integrity verdict.
+pub fn valid_digest(s: str) -> bool {
+    let b = s.bytes()
+    if b.len != 64 { return false }
+    for c in b {
+        if !(c >= 48 as byte && c <= 57 as byte || c >= 97 as byte && c <= 102 as byte) {
+            return false
+        }
+    }
+    true
+}
+
+fn alnum(c: byte) -> bool {
+    c >= 48 as byte && c <= 57 as byte ||
+        c >= 65 as byte && c <= 90 as byte ||
+        c >= 97 as byte && c <= 122 as byte
+}
+
+/// An opaque identifier, never a path or shell expression.
+pub fn valid_id(s: str) -> bool {
+    let b = s.bytes()
+    if b.len == 0 || b.len > 128 || !alnum(b[0]) { return false }
+    for c in b { if !alnum(c) && c != 45 as byte && c != 95 as byte { return false } }
+    true
+}
+
+fn check(p: Parsed, required: List[str], operands: int) -> str {
+    if p.error != "" { return p.error }
+    if p.operands.len != operands { return "unexpected operand" }
+    for key in required { if !has(p, key) { return "missing {key}" } }
+    if has(p, "--expect-sha256") && !valid_digest(value(p, "--expect-sha256")) {
+        return "invalid digest"
+    }
+    for key in ["--expect-bytes", "--identity-fd"] {
+        if has(p, key) && !valid_number(value(p, key)) { return "invalid number" }
+    }
+    for key in ["--id", "--resume"] {
+        if has(p, key) && !valid_id(value(p, key)) { return "invalid id" }
+    }
+    ""
+}
+
+fn usage(reason: str) -> int { eprint("denward: usage: {reason}"); 2 }
+fn unsupported(capability: str) -> int { eprint("denward: unsupported: {capability}"); 2 }
+
+fn refuse(p: Parsed, required: List[str], operands: int, capability: str) -> int {
+    let error = check(p, required, operands)
+    if error != "" { return usage(error) }
+    unsupported(capability)
+}
+
+fn help() -> str {
+    "denward: refusal-only scaffold; data operations are unsupported\nUsage: denward version | help | stores | store mount|unmount | inspect | backup | verify | list | receive | send | restore | status | compare\nEncryption is the default selection. Plaintext requires --format plaintext and --ack-plaintext-owner-held. No data is read, written or verified by this scaffold."
+}
+
+/// Parse only; every data path returns before any I/O capability is available.
+pub fn run(args: List[str]) -> int {
+    if args.len > 256 { return usage("argument limit") }
+    for arg in args { if arg.bytes().len > 4096 { return usage("argument limit") } }
+    if args.len == 0 { return usage("missing command") }
+    let command = args[0]
+    if command == "version" || command == "--version" {
+        if args.len != 1 { return usage("unexpected operand") }
+        print("denward 0.0.0-dev (refusal-only)")
+        return 0
+    }
+    if command == "help" || command == "--help" {
+        if args.len != 1 { return usage("unexpected operand") }
+        print(help())
+        return 0
+    }
+    if command == "stores" {
+        return refuse(parse(args, 1, [], ["--json"]), [], 0, "stores")
+    }
+    if command == "store" {
+        if args.len < 2 { return usage("missing store command") }
+        if args[1] == "mount" {
+            return refuse(
+                parse(args, 2, ["--device", "--expect-serial", "--at"], ["--read-only"]),
+                ["--device", "--expect-serial", "--at"],
+                0,
+                "store-mount",
+            )
+        }
+        if args[1] == "unmount" {
+            return refuse(parse(args, 2, ["--at"], []), ["--at"], 0, "store-unmount")
+        }
+        return usage("unknown store command")
+    }
+    if command == "inspect" {
+        return refuse(
+            parse(args, 1, ["--source", "--baseline"], ["--json"]),
+            ["--source"],
+            0,
+            "inventory",
+        )
+    }
+    if command == "backup" {
+        let p = parse(args, 1, ["--source", "--to", "--baseline", "--format"], ["--offline", "--ack-plaintext-owner-held"])
+        let error = check(p, ["--source", "--to", "--offline"], 0)
+        if error != "" { return usage(error) }
+        var format = value(p, "--format")
+        if format == "" { format = "encrypted" }
+        if format != "encrypted" && format != "plaintext" { return usage("unsupported format") }
+        if format == "plaintext" {
+            if !has(p, "--ack-plaintext-owner-held") {
+                return usage("plaintext requires held-media acknowledgement")
+            }
+            return unsupported("backup")
+        }
+        if has(p, "--ack-plaintext-owner-held") {
+            return usage("acknowledgement requires explicit plaintext")
+        }
+        return unsupported("encrypted-format-provider")
+    }
+    if command == "verify" {
+        let p = parse(args, 1, ["--expect-sha256", "--expect-bytes", "--identity-fd"], [])
+        let error = check(p, ["--expect-sha256"], 1)
+        if error != "" { return usage(error) }
+        if has(p, "--identity-fd") { return unsupported("keyed-verify") }
+        return unsupported("ciphertext-verify")
+    }
+    if command == "list" {
+        return refuse(
+            parse(args, 1, ["--expect-sha256", "--identity-fd"], ["--json"]),
+            ["--expect-sha256"],
+            1,
+            "archive-list",
+        )
+    }
+    if command == "receive" {
+        let p = parse(args, 1, ["--directory", "--id", "--expect-sha256", "--expect-bytes"], ["--commit"])
+        var required = ["--directory", "--id"]
+        var capability = "receiver"
+        if has(p, "--commit") {
+            (mut required).push("--expect-sha256")
+            (mut required).push("--expect-bytes")
+            capability = "receiver-commit"
+        }
+        return refuse(p, required, 0, capability)
+    }
+    if command == "send" {
+        return refuse(parse(args, 1, ["--directory", "--id"], ["--receipt"]), ["--directory", "--id"], 0, "sender")
+    }
+    if command == "restore" {
+        return refuse(
+            parse(args, 1, ["--target", "--expect-sha256", "--decisions", "--resume", "--identity-fd"], ["--preview"]),
+            ["--target", "--expect-sha256"],
+            1,
+            "restore",
+        )
+    }
+    if command == "status" {
+        return refuse(parse(args, 1, ["--target"], ["--json"]), [], 0, "status")
+    }
+    if command == "compare" {
+        return refuse(
+            parse(args, 1, ["--target", "--expect-sha256", "--identity-fd"], []),
+            ["--target", "--expect-sha256"],
+            1,
+            "compare",
+        )
+    }
+    usage("unknown command")
+}

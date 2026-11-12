@@ -1,0 +1,29 @@
+use cli
+
+fn expect(ok: bool, name: str) -> bool {
+    if !ok { eprint("FAIL {name}") }
+    ok
+}
+
+fn main() -> int {
+    var good = true
+    for s in ["0", "1", "9223372036854775807"] {
+        if !expect(cli.valid_number(s), "number-valid") { good = false }
+    }
+    for s in ["", "00", "01", "-1", "+1", "1.0", "1x", "9223372036854775808", "99999999999999999999"] {
+        if !expect(!cli.valid_number(s), "number-invalid") { good = false }
+    }
+    if !expect(cli.valid_digest("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"), "digest-valid") { good = false }
+    for s in ["", "0", "0123456789ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef", "g123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"] {
+        if !expect(!cli.valid_digest(s), "digest-invalid") { good = false }
+    }
+    for s in ["a", "0", "Test_1-backup"] {
+        if !expect(cli.valid_id(s), "id-valid") { good = false }
+    }
+    for s in ["", ".", "..", "-a", "_a", "a/b", "a b", "a;exit", "é"] {
+        if !expect(!cli.valid_id(s), "id-invalid") { good = false }
+    }
+    if !good { return 1 }
+    print("PASS cli-unit")
+    0
+}
