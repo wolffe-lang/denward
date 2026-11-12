@@ -1,0 +1,34 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [trunk]
+  schedule:
+    - cron: '41 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scaffold:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+          - os: macos-15
+            platform: macos-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      DENWARD_WORKSPACE: ${{ github.workspace }}/.work/ci
+      DENWARD_EXPECT_PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Check contracts and failing witnesses
+        run: python3 -I tools/gate.py --suite core
+      - name: Fetch exact toolchain
+        run: python3 -I tools/fetch-toolchain.py
+      - name: Build and exercise refusal shell
+        run: python3 -I tools/gate.py --suite native

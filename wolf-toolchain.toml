@@ -1,0 +1,19 @@
+# Exact published archive digests, verified twice through release metadata.
+[wolf]
+version = "0.2.39"
+repo = "wolffe-lang/wolf-lang"
+rev = "3fc86f77795afbbd6fbe483fef76c08e7f13a840"
+aarch64-apple-darwin = "63de947671c240fc8be3e3480bb36321b0a6ac0b5e12e16bdae164d9050cfde0"
+x86_64-unknown-linux-gnu = "53f75d2b2dd79c0532b21920bc9f073098154aa0133caa2405209a1ef2af0457"
+
+[lupin]
+version = "0.1.61"
+repo = "wolffe-lang/wolf-interp"
+rev = "a10cbe5745d6092752217932851d3b9c12c66b4d"
+aarch64-apple-darwin = "7236424618f5bbf1e5f7693cd6333df90b715e1401b08b795668cbb1425ed5af"
+x86_64-unknown-linux-gnu = "61ce849eac0b531803e5bdf1fe07d91d3d69ecb57f83c5e7eb7c5d553cbef41b"
+
+[std]
+repo = "wolffe-lang/wolf-std"
+rev = "77cf3210a82c93dc05ded987c249bb69e79b0a89"
+tree = "8ed51cc10bbe18b2fc7734c802af84422873899f"
