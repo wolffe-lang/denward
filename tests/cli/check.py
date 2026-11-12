@@ -48,13 +48,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--program', type=Path, required=True)
     ap.add_argument('--workspace', type=Path, required=True)
+    ap.add_argument('--cases', type=Path, default=ROOT / 'tests/cli/cases.json')
     a = ap.parse_args()
     program = a.program.resolve()
     if not program.is_file() or not os.access(program, os.X_OK):
         print('FAIL C01-version executable-missing')
         return 1
     a.workspace.mkdir(parents=True, exist_ok=True)
-    rows = json.loads((ROOT / 'tests/cli/cases.json').read_text())
+    rows = json.loads(a.cases.read_text())
     failures = 0
     with tempfile.TemporaryDirectory(prefix='cli-', dir=a.workspace) as d:
         root = Path(d)
@@ -89,7 +90,7 @@ def main():
         ok = r.returncode == 2 and r.stderr == b'denward: usage: argument limit\n' and not r.stdout and snapshot(root) == before
         print(('PASS' if ok else 'FAIL') + ' C41-argument-count')
         failures += not ok
-    print('CLI-RESULT rows=41 failures=' + str(failures))
+    print('CLI-RESULT rows=' + str(len(rows) + 1) + ' failures=' + str(failures))
     return int(failures != 0)
 
 

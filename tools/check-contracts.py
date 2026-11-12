@@ -32,7 +32,7 @@ def main():
     store = (ROOT / 'spec/stores-v1.md').read_text()
     require(all(t in store for t in ['macOS arm64', 'OpenSSH', 'encrypted volume', '**received**', '--commit', 'No transfer resume']), 'K07-mac-first-store')
     rows = json.loads((ROOT / 'tests/cli/cases.json').read_text())
-    require(len(rows) == 40 and len({r['id'] for r in rows}) == 40, 'K08-cli-fixture-census')
+    require(len(rows) == 52 and len({r['id'] for r in rows}) == 52, 'K08-cli-fixture-census')
     require({r['id'] for r in rows} >= {'C08-encrypted-default', 'C10-plaintext-ack-required', 'C12-no-implicit-plaintext', 'C17-ciphertext-verify-only', 'C18-keyed-verify'}, 'K09-refusal-boundaries')
     cli_test = runpy.run_path(str(ROOT / 'tests/cli/check.py'))
     sample = {'code': 2, 'err': 'denward: unsupported: encrypted-format-provider\n'}
