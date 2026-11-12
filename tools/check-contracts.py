@@ -25,7 +25,7 @@ def main():
     require(re.fullmatch('[0-9a-f]{40}', pins['std']['rev']) and re.fullmatch('[0-9a-f]{40}', pins['std']['tree']), 'K03-std-pin')
     hashes = {'LICENSE': '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986', 'LICENSE-TRAINING-DATA': '39d16667f8215642b3e1f6b65c5169dc4ca288c5cef87b17f2c16a0be5a74da3'}
     require(all(hashlib.sha256((ROOT / n).read_bytes()).hexdigest() == h for n, h in hashes.items()), 'K04-license-pair')
-    specs = ['cli-v1', 'backup-v1', 'manifest-v1', 'stream-v1', 'stores-v1', 'restore-state-v1', 'compatibility-v1']
+    specs = ['cli-v1', 'backup-v1', 'manifest-v1', 'stream-v1', 'stores-v1', 'restore-state-v1', 'compatibility-v1', 'encryption-v1']
     require(all((ROOT / 'spec' / (n + '.md')).is_file() for n in specs), 'K05-versioned-contracts')
     stream = (ROOT / 'spec/stream-v1.md').read_text()
     require(all(t in stream for t in ['Encryption is the default', 'Without a key', 'With a key', 'No stage may buffer the entire archive', 'No exception handler substitutes a pass-through']), 'K06-encryption-seam')

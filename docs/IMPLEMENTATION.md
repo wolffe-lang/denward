@@ -4,7 +4,7 @@
 
 Build a static wolf command for PAX with native macOS arm64 and Linux endpoints. SSH to a Mac's encrypted volume is the primary store; a separate disk is the second copy. A fresh journalled PAX install precedes restoration. No raw-disk image, filesystem conversion, web store, preserved same-disk partition or installer UI is part of the initial tool.
 
-The accepted pipeline is a bounded archive stream, a standard encrypted-format provider, then an untrusted byte store. Both the archive writer and every store take explicit stream interfaces. The encrypted provider's published format is being designed independently; this scaffold provides only the integration contract and refuses the unavailable provider. Plaintext always requires explicit format selection and the held-media acknowledgement.
+The accepted pipeline is a bounded archive stream, a standard encrypted-format provider, then an untrusted byte store. Both the archive writer and every store take explicit stream interfaces. The selected profile is ordinary binary age v1 with two native X25519 recovery recipients; see encryption-v1. This scaffold refuses the unavailable provider. Plaintext requires both explicit flags on held local media and is never allowed over SSH. The first real backup is gated on qualified entropy, independent review, interoperability and external key recovery.
 
 ## Sequence
 
@@ -22,4 +22,4 @@ Named rows cover scope, physical archive framing, logical metadata/link/sparse f
 
 The shared archive audit found a descriptor reader but no ready sink-based archive-writer API at the needed backup limits. Do not silently import its package-specific policy or caps. Publication, exact pin/provenance, a stream adapter and separately tested backup limits precede reuse. No dependency is copied yet.
 
-The standard encryption provider, qualified sparse/no-follow/journal interfaces, actual journalled installer and maintenance integration are not implemented by this scaffold. All data verbs refuse. No personal-data size has been supplied; capacity must be measured before choosing media or authorizing a reinstall.
+The standard encryption provider, qualified sparse/no-follow/journal interfaces, actual journalled installer and maintenance integration are not implemented by this scaffold. All data verbs refuse. The supplied sizing input is about 5.47 GiB allocated, but exact archive capacity and the in-memory entry bound remain admission measurements; no on-disk inventory/sort spool is allowed. See capacity and archive-adapter for the measured-budget prerequisite and revised 6–10-day first-backup phase.

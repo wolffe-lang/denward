@@ -6,7 +6,7 @@ A backup and restore tool in wolf for carrying personal data and system identity
 
 The primary store is an SSH receiver on macOS arm64, reached through macOS's OpenSSH server, with an ordinary destination directory on an encrypted volume. The same endpoint will run on Linux. A separate physical disk holds the second verified copy. A successful SSH transfer alone will not establish a complete backup.
 
-The pipeline is **archive → standard encryption provider → store**. Encryption is the default selection, but its provider is unavailable in this scaffold. Plaintext requires both explicit selection and `--ack-plaintext-owner-held`; there is no implicit plaintext fallback. The standard encrypted format is being specified separately before implementation. No cipher or encrypted container is invented here.
+The pipeline is **archive → ordinary age v1 encryption → store**, initially native X25519 with two independently generated recovery identities. Public recipients go on PAX; private halves stay on the Mac and offline media. Encryption is the default selection, but its provider is unavailable in this scaffold. The held-local-media exception requires both `--plaintext` and `--ack-plaintext-owner-held`, and is never permitted over SSH. Every real primary-store backup is encrypted from its first stored byte. No cipher or encrypted container is invented here; first use waits for qualified entropy, independent review, interoperability and key-recovery rehearsal.
 
 ## Contract
 
@@ -17,7 +17,7 @@ The pipeline is **archive → standard encryption provider → store**. Encrypti
 - Show unsupported metadata and unresolved account/configuration choices by name; never silently omit them.
 - Keep web hosting, same-disk partition preservation and installer integration out of the first implementation.
 
-See [the implementation plan](docs/IMPLEMENTATION.md), [CLI](spec/cli-v1.md), [backup format](spec/backup-v1.md), [manifest](spec/manifest-v1.md), [stores](spec/stores-v1.md), [stream boundary](spec/stream-v1.md), [recovery](spec/restore-state-v1.md) and [compatibility](spec/compatibility-v1.md). The archive, command and store contracts are versioned; the encrypted provider's wire format is deliberately not frozen here.
+See [the implementation plan](docs/IMPLEMENTATION.md), [CLI](spec/cli-v1.md), [backup format](spec/backup-v1.md), [manifest](spec/manifest-v1.md), [stores](spec/stores-v1.md), [stream boundary](spec/stream-v1.md), [recovery](spec/restore-state-v1.md) and [compatibility](spec/compatibility-v1.md). The archive, command and store contracts are versioned; the ordinary age profile is defined in [encryption](spec/encryption-v1.md), not a custom envelope.
 
 ## Development
 

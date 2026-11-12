@@ -112,6 +112,7 @@ fn check(p: Parsed, required: List[str], operands: int) -> str {
     for key in ["--expect-bytes", "--identity-fd"] {
         if has(p, key) && !valid_number(value(p, key)) { return "invalid number" }
     }
+    if has(p, "--identity") && has(p, "--identity-fd") { return "ambiguous identity input" }
     for key in ["--id", "--resume"] {
         if has(p, key) && !valid_id(value(p, key)) { return "invalid id" }
     }
@@ -127,8 +128,21 @@ fn refuse(p: Parsed, required: List[str], operands: int, capability: str) -> int
     unsupported(capability)
 }
 
+fn format_error(p: Parsed, ssh: bool) -> str {
+    if has(p, "--plaintext") && ssh { return "plaintext is not permitted over ssh" }
+    if has(p, "--plaintext") && has(p, "--format") { return "conflicting format selectors" }
+    if has(p, "--format") && value(p, "--format") != "encrypted" { return "unsupported format" }
+    if has(p, "--plaintext") && !has(p, "--ack-plaintext-owner-held") {
+        return "plaintext requires held-media acknowledgement"
+    }
+    if !has(p, "--plaintext") && has(p, "--ack-plaintext-owner-held") {
+        return "acknowledgement requires explicit plaintext"
+    }
+    ""
+}
+
 fn help() -> str {
-    "denward: refusal-only scaffold; data operations are unsupported\nUsage: denward version | help | stores | store mount|unmount | inspect | backup | verify | list | receive | send | restore | status | compare\nEncryption is the default selection. Plaintext requires --format plaintext and --ack-plaintext-owner-held. No data is read, written or verified by this scaffold."
+    "denward: refusal-only scaffold; data operations are unsupported\nUsage: denward version | help | stores | store mount|unmount | inspect | backup | verify | list | receive | send | restore | status | compare\nEncryption is the default selection. Plaintext requires --plaintext and --ack-plaintext-owner-held on held local media, never ssh. No data is read, written or verified by this scaffold."
 }
 
 /// Parse only; every data path returns before any I/O capability is available.
@@ -174,40 +188,38 @@ pub fn run(args: List[str]) -> int {
         )
     }
     if command == "backup" {
-        let p = parse(args, 1, ["--source", "--to", "--baseline", "--format"], ["--offline", "--ack-plaintext-owner-held"])
+        let p = parse(args, 1, ["--source", "--to", "--baseline", "--format"], ["--offline", "--plaintext", "--ack-plaintext-owner-held"])
         let error = check(p, ["--source", "--to", "--offline"], 0)
         if error != "" { return usage(error) }
-        var format = value(p, "--format")
-        if format == "" { format = "encrypted" }
-        if format != "encrypted" && format != "plaintext" { return usage("unsupported format") }
-        if format == "plaintext" {
-            if !has(p, "--ack-plaintext-owner-held") {
-                return usage("plaintext requires held-media acknowledgement")
-            }
+        let policy = format_error(p, false)
+        if policy != "" { return usage(policy) }
+        if has(p, "--plaintext") {
+            if text.starts_with(value(p, "--to"), "ssh:") { return usage("plaintext is not permitted over ssh") }
             return unsupported("backup")
-        }
-        if has(p, "--ack-plaintext-owner-held") {
-            return usage("acknowledgement requires explicit plaintext")
         }
         return unsupported("encrypted-format-provider")
     }
     if command == "verify" {
-        let p = parse(args, 1, ["--expect-sha256", "--expect-bytes", "--identity-fd"], [])
+        let p = parse(args, 1, ["--expect-sha256", "--expect-bytes", "--identity", "--identity-fd"], ["--decrypt"])
         let error = check(p, ["--expect-sha256"], 1)
         if error != "" { return usage(error) }
-        if has(p, "--identity-fd") { return unsupported("keyed-verify") }
+        let identity = has(p, "--identity") || has(p, "--identity-fd")
+        if identity && !has(p, "--decrypt") { return usage("key input requires --decrypt") }
+        if has(p, "--decrypt") {
+            if !identity { return unsupported("identity-required") }
+            return unsupported("keyed-verify")
+        }
         return unsupported("ciphertext-verify")
     }
     if command == "list" {
-        return refuse(
-            parse(args, 1, ["--expect-sha256", "--identity-fd"], ["--json"]),
-            ["--expect-sha256"],
-            1,
-            "archive-list",
-        )
+        let p = parse(args, 1, ["--expect-sha256", "--identity", "--identity-fd"], ["--json"])
+        let error = check(p, ["--expect-sha256"], 1)
+        if error != "" { return usage(error) }
+        if !has(p, "--identity") && !has(p, "--identity-fd") { return unsupported("identity-required") }
+        return unsupported("archive-list")
     }
     if command == "receive" {
-        let p = parse(args, 1, ["--directory", "--id", "--expect-sha256", "--expect-bytes"], ["--commit"])
+        let p = parse(args, 1, ["--directory", "--id", "--expect-sha256", "--expect-bytes", "--format"], ["--commit", "--plaintext", "--ack-plaintext-owner-held"])
         var required = ["--directory", "--id"]
         var capability = "receiver"
         if has(p, "--commit") {
@@ -215,7 +227,11 @@ pub fn run(args: List[str]) -> int {
             (mut required).push("--expect-bytes")
             capability = "receiver-commit"
         }
-        return refuse(p, required, 0, capability)
+        let error = check(p, required, 0)
+        if error != "" { return usage(error) }
+        let policy = format_error(p, true)
+        if policy != "" { return usage(policy) }
+        return unsupported(capability)
     }
     if command == "send" {
         return refuse(parse(args, 1, ["--directory", "--id"], ["--receipt"]), ["--directory", "--id"], 0, "sender")

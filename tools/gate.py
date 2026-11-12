@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import time
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,6 +57,17 @@ def main():
         raise RuntimeError('staged toolchain missing')
     if subprocess.check_output(['git', '-C', str(std.parent), 'status', '--porcelain'], text=True):
         raise RuntimeError('standard library checkout modified')
+    pins = tomllib.loads((ROOT / 'wolf-toolchain.toml').read_text())
+    for rev, expected in [('HEAD', pins['std']['rev']), ('HEAD^{tree}', pins['std']['tree'])]:
+        if subprocess.check_output(['git', '-C', str(std.parent), 'rev-parse', rev], text=True).strip() != expected:
+            raise RuntimeError('standard library identity mismatch')
+    for path, key in [(wolf, 'wolf_sha256'), (Path(state['lupin']), 'lupin_sha256'), (wolf.parent / 'libwolf_rt.a', 'runtime_sha256')]:
+        h = hashlib.sha256()
+        with path.open('rb') as f:
+            while block := f.read(131072):
+                h.update(block)
+        if h.hexdigest() != state[key]:
+            raise RuntimeError('staged executable/runtime digest mismatch')
     # Outputs and caches are ignored; tracked source must be the committed take.
     if subprocess.check_output(['git', 'diff', '--name-only', 'HEAD'], cwd=ROOT, text=True):
         raise RuntimeError('build requires committed tracked source')

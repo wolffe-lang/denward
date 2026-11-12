@@ -38,6 +38,9 @@ def command(args, **kw):
 
 def fetch(name, pin, target):
     directory = CACHE / 'downloads' / (name + '-' + target)
+    for parent in [CACHE, directory.parent, directory]:
+        if parent.is_symlink():
+            raise RuntimeError('toolchain cache symlink refused')
     directory.mkdir(parents=True, exist_ok=True)
     archive = directory / 'release.tar.gz'
     expected = pin[target]
@@ -56,12 +59,17 @@ def fetch(name, pin, target):
     if sha256(archive) != expected:
         raise RuntimeError('cached release digest mismatch')
     extracted = CACHE / 'extracted' / (name + '-' + target)
-    if not extracted.exists():
-        extracted.mkdir(parents=True)
-        if not hasattr(tarfile, 'data_filter'):
-            raise RuntimeError('Python tar data filter required')
-        with tarfile.open(archive, 'r:gz') as tar:
-            tar.extractall(extracted, filter='data')
+    for parent in [CACHE, directory.parent, directory, extracted.parent, extracted]:
+        if parent.is_symlink():
+            raise RuntimeError('toolchain cache symlink refused')
+    # Recreate executable bytes from the checked archive, not a stale extraction.
+    if extracted.exists():
+        shutil.rmtree(extracted)
+    extracted.mkdir(parents=True)
+    if not hasattr(tarfile, 'data_filter'):
+        raise RuntimeError('Python tar data filter required')
+    with tarfile.open(archive, 'r:gz') as tar:
+        tar.extractall(extracted, filter='data')
     if sha256(archive) != expected:
         raise RuntimeError('release changed during extraction')
     binaries = [p for p in extracted.rglob(name) if p.is_file() and not p.is_symlink() and os.access(p, os.X_OK)]
@@ -101,7 +109,7 @@ def main():
         raise RuntimeError('standard library tree mismatch')
     if command(['git', '-C', str(std), 'status', '--porcelain']):
         raise RuntimeError('standard library checkout is modified')
-    state = {'target': target, 'wolf': str(wolf), 'lupin': str(lupin), 'std': str(std / 'std'), 'pins_sha256': sha256(ROOT / 'wolf-toolchain.toml')}
+    state = {'target': target, 'wolf': str(wolf), 'lupin': str(lupin), 'std': str(std / 'std'), 'pins_sha256': sha256(ROOT / 'wolf-toolchain.toml'), 'wolf_sha256': sha256(wolf), 'lupin_sha256': sha256(lupin), 'runtime_sha256': sha256(wolf.parent / 'libwolf_rt.a')}
     (CACHE / 'toolchain.json').write_text(json.dumps(state, indent=2) + '\n')
     print('PASS pin-std')
 
