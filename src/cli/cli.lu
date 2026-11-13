@@ -121,7 +121,7 @@ fn check(p: Parsed, required: List[str], operands: int) -> str {
 
 fn usage(reason: str) -> int { eprint("denward: usage: {reason}"); 2 }
 
-fn unsupported(capability: str) -> int { eprint("denward: unsupported: {capability}"); 2 }
+fn unsupported(capability: str) -> int { eprint("denward: unsupported: {capability}"); 0 }
 
 fn refuse(p: Parsed, required: List[str], operands: int, capability: str) -> int {
     let error = check(p, required, operands)
