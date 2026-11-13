@@ -111,9 +111,15 @@ pub fn file(mut w: Writer, member: Member, mut source: payload.Stream) -> str {
     while source.pos < source.length {
         var n = source.length - source.pos
         if n > w.core.profile.chunk_bytes { n = w.core.profile.chunk_bytes }
-        let got = payload.read_into(source.fd, mut buffer, n) else |_| {
-            source.error = "archive-source-io"
-            return fail(mut w, "archive-source-io")
+        let got = payload.read_into(source.fd, mut buffer, n) else |e| match e {
+            eof => {
+                source.error = "archive-source-truncated"
+                return fail(mut w, "archive-source-truncated")
+            },
+            io => {
+                source.error = "archive-source-io"
+                return fail(mut w, "archive-source-io")
+            },
         }
         if got == 0 {
             source.error = "archive-source-truncated"

@@ -6,7 +6,7 @@ fn empty_hash() -> str { "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca49599
 fn abc_hash() -> str { "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" }
 
 fn expect(ok: bool, name: str) -> bool {
-    if ok { print("PASS {name}\n") } else { eprint("FAIL {name}\n") }
+    if ok { print("PASS {name}") } else { eprint("FAIL {name}") }
     ok
 }
 
@@ -60,7 +60,7 @@ fn emit(n: int, hash: str) -> int {
         error = archive.file(mut w, member(hash, n), mut input)
     }
     if error == "" { error = archive.finish(mut w) }
-    if error != "" { eprint("archive:{error}\n"); return 1 }
+    if error != "" { eprint("archive:{error}"); return 1 }
     0
 }
 
@@ -249,7 +249,7 @@ fn unit(dir: str) -> int {
         return 1
     }
     fs_close(cap_fd) else |_| { return 1 }
-    print("PASS archive-adapter-unit\n")
+    print("PASS archive-adapter-unit")
     0
 }
 
@@ -263,9 +263,9 @@ fn main() -> int {
         var input = window(0, payload.number(a[1].bytes(), 10))
         let result = archive.inspect(mut input, p)
         if result.error != "" {
-            print("refused:{result.error}\n")
+            print("refused:{result.error}")
         } else {
-            print("physical:{result.entries.len}\n")
+            print("physical:{result.entries.len}")
         }
         return 0
     }
