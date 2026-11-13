@@ -101,9 +101,31 @@ and publish them only after the required stream verification succeeds. That
 is not permission for a plaintext archive/cache spool, which remains forbidden.
 No descriptor is closed, no file synced/renamed, and no receipt published by
 the codec. Private partial cleanup and interruption/publication authority
-remain the future controller's responsibility.
+remain the future controller's responsibility. The controller MUST compare
+returned encrypt plaintext count with the archive length it intended to send:
+early source EOF can otherwise produce a complete authentic ciphertext of a
+truncated archive. A stream-success count alone is not archive completeness.
+The mutation grammar is an implementer-written model alongside the parser;
+it detects implementation slips, not shared specification misreadings.
 
-Limits are application admission, not universal age-format maxima. A 256 MiB
+Stricter cases: a usable stanza followed by a low-order share, malformed
+known argument list or 31-byte body is refused here even where reference age
+stops at the first usable stanza. Native key text accepts all-lowercase
+identities and all-uppercase recipients as Bech32 permits, while reference
+age refuses those presentations. The test driver rejects CRLF identity files
+that reference age accepts; normalize such a test input explicitly, never
+silently repair a key. These are compatibility limits, not extra security
+claims. The retained generic 90-character Bech32 bound affects no 62/74-byte
+native key, and does not claim support for longer recipient profiles.
+
+Limits are application admission, not universal age-format maxima. Files
+from other age implementations with more than 64 stanzas, more than 64
+identity-and-stanza pairs, argument lines over 4096 bytes including LF, or
+headers over 1 MiB are refused here; the reference accepts such files.
+`truncated` also reports bytes after a valid final chunk and an empty
+noninitial final chunk. An oversized body line can be budget through the
+stream reader but header through parse_header; these entry points do not
+promise identical diagnostic priority. A 256 MiB
 process memory measurement must include runtime overhead, allocator behavior
 and parent/spawn context. The Linux witnesses use a stronger 256 MiB
 address-space bound and report the small parent's self peak as a reference,
@@ -111,9 +133,17 @@ not a guaranteed lower bound on the child: the development record's measured
 child peaks were lower. Cumulative child rusage is an upper-bound observation,
 not an intrinsic exact peak; do not subtract the parent reference from it.
 
-The prerequisite audit observed secret-derived division in default-build
-x86 X25519 and none in the inspected release counterparts. Retake/read the
-current-context captures; absence of division is not a timing certificate.
+Both builds divide on secret-derived operands. Default builds on both targets
+include X25519 fe_carry 40, fe_freeze 38, fe_tobytes 62, clamp 2 and ladder 4,
+and Poly1305 absorb 19, poly1305 50 and push_tag_word 7. Release x86-64
+extracts scalar bits with an 8-bit DIV in the X25519 ladder (none on arm64).
+Bech32 identity decoding divides identity-derived values on both targets;
+its alphabet lookup also exits early on secret characters in both builds.
+See wolf-std#151. The prior release-division-free statement missed unsigned
+DIV and was false. Instruction latency on the intended CPUs is unqualified;
+no timing claim is made. The capture gate permits only exact pinned known
+sites tied to that issue; its exception list becomes empty when the std fix
+is pinned. Real-backup use remains blocked on that fix and review.
 Shipped binaries are release builds. Neither source fixed work, generated
 instruction counts nor vector agreement certifies constant time. Checked and
 lupin budget refusals are unsupported, never measured primitive passes.

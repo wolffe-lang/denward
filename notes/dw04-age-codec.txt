@@ -129,8 +129,10 @@ Additional witness prediction, before any memory-path correction:
   memory. Measure that row red before a consumer-side lifetime correction;
   do not alter std or lower the approved header bound silently.
 - Parser mutations use fixed seeds 0x44573034, 0x137173 and 0x8439, bounded
-  input/output/CPU/address space, a grammar oracle from the specification, and
-  retained bounded-minimization counterexamples. Coverage names grammar,
+  input/output/CPU/address space, a grammar model written by the implementer
+  alongside the parser, and retained bounded-minimization counterexamples.
+  It detects implementation slips, not shared specification misreadings.
+  Coverage names grammar,
   outcome and mutation categories, not unmeasured statement/branch coverage.
 
 Evidence index
@@ -177,16 +179,39 @@ read by the native macOS codec for both identities; wrong identities refused.
 The two source-head-bound fixture manifests and complete exit statuses are
 part of the interoperability evidence, not a same-tool roundtrip.
 
-The current-context arm64 captures at d35359d show default SDIV in X25519
-fe_carry (40), fe_freeze (38), clamp (2) and ladder (4), on secret-derived
-arithmetic paths. The corresponding inspected release functions contain none.
-The earlier x86-64 capture at e6cbfa1 has IDIV counts 40/38/2/4 respectively,
-and none in the inspected release counterparts. These are scoped instruction
-observations, not timing measurements or proof of secret-independent latency.
+The earlier division-free release claim was false: the count missed unsigned
+DIV. Both builds divide on secret-derived operands. Default builds on both
+targets include X25519 fe_carry 40, fe_freeze 38, fe_tobytes 62, clamp 2 and
+ladder 4, plus Poly1305 absorb 19, poly1305 50 and push_tag_word 7. Release
+x86-64 extracts scalar bits with an 8-bit DIV in the X25519 ladder (none on
+arm64); Bech32 identity decoding divides identity-derived values on both
+targets. Its alphabet lookup exits early on secret characters in both builds.
+See wolf-std#151. Instruction latency on the intended CPUs is unqualified;
+no timing claim is made. The generated-code gate must match only exact known
+sites at these pins; after the std fix is pinned, that exception list is empty.
 Default byte equality and zero checks load/fold every byte before the result;
 release open_header contains a vector/scalar XOR/OR MAC fold followed by its
 outcome branch. Bounds/index/overflow paths and allocator/runtime behavior
 remain separate review obligations. There is no timing certification.
+
+Reviewed baseline records at 0b0d534 (superseded by review corrections):
+Linux linux.log SHA-256
+91d48aa5dad7fc12fdb892e585b1168a9d97bb3a39293dc735fccceebf6cc4ed;
+Mac mac.log SHA-256
+6fa354889c7395692d03dd77153dba9da69802c6895cf4b6c2263ae422cedb92;
+plant plant.log SHA-256
+e7b42598ff75665818400c56b51a526d8e13b9adc5e3ea50edf0a96f7c9f9e70.
+Hosted run 43408607350 passed both target legs at that baseline. These
+records do not qualify later edits; fresh exact-head records accompany the PR.
+
+Review-response prediction, before behavior changes: the public G40 fixture
+must refuse hmac with no plaintext, using only the first identity-major/stanza
+candidate that unwraps; later candidates remain subject to shape/zero checks.
+Make header creation and its raw key/nonce state private to the single encrypt
+operation. Test code may use hashed source-concatenated private copies, never
+a production entropy-injection or key-reuse entry point. The release division
+gate must reject every new, moved or missing div/idiv/sdiv/udiv site against
+an exact target/pin/function/count/site inventory tied to wolf-std#151.
 
 Final exact-head records, binary/runtime/image/rig digests, every END line,
 per-file checked/native/lupin posture, reference release/digests, interop table,

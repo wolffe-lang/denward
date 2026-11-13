@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Bounded syntax differential against an independent specification grammar.
+"""Bounded differential against a grammar model written alongside the parser.
 
+It detects implementation slips, not shared specification misreadings.
 Python's base64 codec is reused as a black box; no codec implementation is
 copied. This is parser/outcome coverage, not statement/branch coverage.
 """
