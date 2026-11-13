@@ -1,0 +1,349 @@
+//! Internal schema-directed manifest reader. Parsing is not content verification.
+use std.fs
+use std.str as text
+use std.x.crypto.sha2
+
+pub error Errors = {manifest_syntax, manifest_duplicate_key, manifest_schema, manifest_budget, manifest_order, manifest_relation, manifest_path, manifest_truncated, manifest_io}
+
+/// Test admission only, not a production inventory qualification.
+pub struct Profile { records: int, input_bytes: int, text_bytes: int }
+/// Fixed schema slots, not a generic JSON value or executable input.
+pub struct Record { strings: List[str], numbers: List[int], present: List[bool] }
+/// Validated manifest relations only. Controls/object contents remain unchecked.
+pub struct Manifest { records: List[Record], objects: List[int], files: List[int], extents: List[int] }
+struct Cursor { raw: List[byte], at: int }
+
+pub fn test_profile() -> Profile { Profile { records: 4096, input_bytes: 16777216, text_bytes: 8388608 } }
+fn keys() -> List[str] {
+    ["record", "schema", "features", "archive_profile", "source_release", "source_manifest", "tool_version", "archive_path", "length", "sha256", "path", "kind", "mount_identity", "baseline_sha256", "reason", "explicit", "id", "type", "mode", "uid", "gid", "user", "group", "object", "link_group", "target", "atime_sec", "atime_nsec", "mtime_sec", "mtime_nsec", "ctime_sec", "ctime_nsec", "birthtime_present", "birthtime_sec", "birthtime_nsec", "sparse", "extent_count", "offset", "object_offset", "file_count", "object_count", "logical_bytes", "stored_object_bytes"]
+}
+fn index(key: str) -> int {
+    let names = keys()
+    for i in 0..names.len { if names[i] == key { return i } }
+    0 - 1
+}
+fn scalar_kind(k: int) -> int {
+    if k == 2 { return 3 }
+    if k == 15 || k == 32 || k == 35 { return 2 }
+    if k == 1 || k == 8 || k >= 18 && k <= 20 || k >= 26 && k <= 31 || k == 33 || k == 34 || k >= 36 { return 1 }
+    0
+}
+fn blank() -> Record {
+    var s = List[str]()
+    var n = List[int]()
+    var seen = List[bool]()
+    for i in 0..43 { (mut s).push(""); (mut n).push(0); (mut seen).push(false) }
+    Record { strings: s, numbers: n, present: seen }
+}
+fn peek(c: Cursor) -> int { if c.at >= c.raw.len { return 0 - 1 }; c.raw[c.at] as int }
+fn ws(mut c: Cursor) { while peek(c) == 32 || peek(c) == 9 || peek(c) == 13 { c.at += 1 } }
+fn take_byte(mut c: Cursor, b: int) -> () ! Errors { if peek(c) != b { return manifest_syntax }; c.at += 1 }
+fn hex(b: int) -> int {
+    if b >= 48 && b <= 57 { return b - 48 }
+    if b >= 65 && b <= 70 { return b - 55 }
+    if b >= 97 && b <= 102 { return b - 87 }
+    0 - 1
+}
+fn word4(mut c: Cursor) -> int ! Errors {
+    var value = 0
+    for i in 0..4 { let digit = hex(peek(c)); if digit < 0 { return manifest_syntax }; value = value * 16 + digit; c.at += 1 }
+    value
+}
+fn push_byte(mut b: List[byte], v: int) -> () ! Errors { if b.len >= 4096 { return manifest_budget }; (mut b).push(v as byte) }
+fn codepoint(mut b: List[byte], cp: int) -> () ! Errors {
+    if cp < 128 { push_byte(mut b, cp)? }
+    else if cp < 2048 { push_byte(mut b, 192 + cp / 64)?; push_byte(mut b, 128 + cp % 64)? }
+    else if cp < 65536 { push_byte(mut b, 224 + cp / 4096)?; push_byte(mut b, 128 + cp / 64 % 64)?; push_byte(mut b, 128 + cp % 64)? }
+    else { push_byte(mut b, 240 + cp / 262144)?; push_byte(mut b, 128 + cp / 4096 % 64)?; push_byte(mut b, 128 + cp / 64 % 64)?; push_byte(mut b, 128 + cp % 64)? }
+}
+fn string(mut c: Cursor) -> str ! Errors {
+    take_byte(mut c, 34)?
+    var result = List[byte]()
+    while peek(c) != 34 {
+        let b = peek(c)
+        if b < 32 { return manifest_syntax }
+        c.at += 1
+        if b != 92 { push_byte(mut result, b)? }
+        else {
+            let escaped = peek(c); c.at += 1
+            if escaped == 34 || escaped == 92 || escaped == 47 { push_byte(mut result, escaped)? }
+            else if escaped == 98 { push_byte(mut result, 8)? }
+            else if escaped == 102 { push_byte(mut result, 12)? }
+            else if escaped == 110 { push_byte(mut result, 10)? }
+            else if escaped == 114 { push_byte(mut result, 13)? }
+            else if escaped == 116 { push_byte(mut result, 9)? }
+            else if escaped == 117 {
+                var cp = word4(mut c)?
+                if cp >= 55296 && cp <= 56319 {
+                    take_byte(mut c, 92)?; take_byte(mut c, 117)?
+                    let low = word4(mut c)?
+                    if low < 56320 || low > 57343 { return manifest_syntax }
+                    cp = 65536 + (cp - 55296) * 1024 + low - 56320
+                } else if cp >= 56320 && cp <= 57343 { return manifest_syntax }
+                codepoint(mut result, cp)?
+            } else { return manifest_syntax }
+        }
+    }
+    c.at += 1
+    str_from_utf8(result) else |_| { return manifest_syntax }
+}
+fn integer(mut c: Cursor, signed: bool) -> int ! Errors {
+    let negative = peek(c) == 45
+    if negative { if !signed { return manifest_syntax }; c.at += 1 }
+    let start = c.at
+    if peek(c) < 48 || peek(c) > 57 { return manifest_syntax }
+    if peek(c) == 48 {
+        c.at += 1
+        if negative || peek(c) >= 48 && peek(c) <= 57 { return manifest_syntax }
+        return 0
+    }
+    // Accumulate negative values, including the asymmetric signed minimum.
+    var n = 0
+    while peek(c) >= 48 && peek(c) <= 57 {
+        let digit = peek(c) - 48
+        if c.at - start >= 19 || n < 0 - 922337203685477580 || n == 0 - 922337203685477580 && digit > if negative { 8 } else { 7 } { return manifest_syntax }
+        n = n * 10 - digit
+        c.at += 1
+    }
+    if negative { n } else { 0 - n }
+}
+fn literal(mut c: Cursor, token: str) -> () ! Errors {
+    for b in token.bytes() { take_byte(mut c, b as int)? }
+}
+fn expected(kind: str) -> List[str] {
+    if kind == "header" { return ["record", "schema", "features", "archive_profile", "source_release", "source_manifest", "tool_version"] }
+    if kind == "control" { return ["record", "archive_path", "length", "sha256"] }
+    if kind == "selection" { return ["record", "path", "kind", "mount_identity", "baseline_sha256"] }
+    if kind == "exclusion" { return ["record", "path", "reason", "explicit"] }
+    if kind == "object" { return ["record", "id", "length", "archive_path"] }
+    if kind == "file" { return ["record", "path", "type", "mode", "uid", "gid", "user", "group", "length", "sha256", "object", "link_group", "target", "atime_sec", "atime_nsec", "mtime_sec", "mtime_nsec", "ctime_sec", "ctime_nsec", "birthtime_present", "birthtime_sec", "birthtime_nsec", "sparse", "extent_count"] }
+    if kind == "extent" { return ["record", "path", "offset", "length", "object", "object_offset"] }
+    if kind == "end" { return ["record", "file_count", "object_count", "extent_count", "logical_bytes", "stored_object_bytes"] }
+    List[str]()
+}
+fn record(raw: List[byte]) -> Record ! Errors {
+    let _valid = str_from_utf8(raw) else |_| { return manifest_syntax }
+    var c = Cursor { raw: raw, at: 0 }
+    var r = blank()
+    ws(mut c); take_byte(mut c, 123)?; ws(mut c)
+    if peek(c) == 125 { return manifest_schema }
+    while true {
+        let name = string(mut c)?; let k = index(name)
+        if k < 0 { return manifest_schema }
+        if r.present[k] { return manifest_duplicate_key }
+        r.present[k] = true
+        ws(mut c); take_byte(mut c, 58)?; ws(mut c)
+        let kind = scalar_kind(k)
+        if kind == 0 {
+            if peek(c) != 34 { return manifest_schema }
+            r.strings[k] = string(mut c)?
+        } else if kind == 1 {
+            if peek(c) == 34 || peek(c) == 123 || peek(c) == 91 || peek(c) == 110 || peek(c) == 116 || peek(c) == 102 { return manifest_schema }
+            r.numbers[k] = integer(mut c, k == 26 || k == 28 || k == 30 || k == 33)?
+        } else if kind == 2 {
+            if peek(c) == 116 { literal(mut c, "true")?; r.numbers[k] = 1 }
+            else if peek(c) == 102 { literal(mut c, "false")? }
+            else { return manifest_schema }
+        } else {
+            take_byte(mut c, 91)?; ws(mut c)
+            if peek(c) != 93 { return manifest_schema }; c.at += 1
+        }
+        ws(mut c)
+        if peek(c) == 125 { c.at += 1; break }
+        take_byte(mut c, 44)?; ws(mut c)
+    }
+    ws(mut c)
+    if c.at != raw.len { return manifest_syntax }
+    let required = expected(r.strings[0])
+    if required.len == 0 { return manifest_schema }
+    var allowed = List[bool]()
+    for i in 0..43 { (mut allowed).push(false) }
+    for name in required { allowed[index(name)] = true }
+    for i in 0..43 { if r.present[i] != allowed[i] { return manifest_schema } }
+    r
+}
+fn digest(s: str) -> bool {
+    if s.len != 64 { return false }
+    for b in s.bytes() { if !(b >= 48 as byte && b <= 57 as byte || b >= 97 as byte && b <= 102 as byte) { return false } }
+    true
+}
+fn path(s: str, empty: bool) -> () ! Errors {
+    if s == "" { if empty { return }; return manifest_path }
+    let b = s.bytes()
+    var start = 0
+    for i in 0..b.len {
+        let v = b[i] as int
+        if v < 32 || v == 127 || v == 92 || v == 194 && i + 1 < b.len && b[i + 1] >= 128 as byte && b[i + 1] <= 159 as byte { return manifest_path }
+        if v == 47 {
+            if i == start { return manifest_path }
+            let part = s[start..i]
+            if part == "." || part == ".." { return manifest_path }
+            start = i + 1
+        }
+    }
+    if start == b.len { return manifest_path }
+    let last = s[start..s.len]
+    if last == "." || last == ".." { return manifest_path }
+}
+fn add(a: int, b: int) -> int ! Errors { if b > 9223372036854775807 - a { return manifest_relation }; a + b }
+fn find(m: Manifest, refs: List[int], value: str, slot: int) -> int {
+    var low = 0; var high = refs.len
+    while low < high {
+        let mid = low + (high - low) / 2
+        let r = m.records[refs[mid]]
+        if r.strings[slot] < value { low = mid + 1 } else { high = mid }
+    }
+    if low < refs.len && m.records[refs[low]].strings[slot] == value { return refs[low] }
+    0 - 1
+}
+fn object_length(m: Manifest, id: str) -> int ! Errors {
+    let found = find(m, m.objects, id, 16)
+    if found < 0 { return manifest_relation }
+    m.records[found].numbers[8]
+}
+fn file_rules(r: Record) -> () ! Errors {
+    let s = r.strings; let n = r.numbers
+    path(s[10], false)?
+    if n[18] > 4095 || n[19] > 4294967295 || n[20] > 4294967295 || n[27] > 999999999 || n[29] > 999999999 || n[31] > 999999999 || n[34] > 999999999 { return manifest_relation }
+    if n[32] == 0 && (n[33] != 0 || n[34] != 0) { return manifest_relation }
+    let kind = s[17]
+    if kind == "file" {
+        if !digest(s[9]) || s[25] != "" || s[24] != "" && s[24] != s[10] { return manifest_relation }
+        if n[35] == 0 { if !digest(s[23]) || s[23] != s[9] || n[36] != 0 { return manifest_relation } }
+        else if s[23] != "" { return manifest_relation }
+    } else if kind == "symlink" {
+        if !digest(s[9]) || s[9] != s[23] || n[8] != s[25].len || s[24] != "" || n[35] != 0 || n[36] != 0 { return manifest_relation }
+        let b = s[25].bytes()
+        for v in b { if v == 0 as byte { return manifest_relation } }
+        if sha2.to_hex(sha2.sum256(b)) != s[9] { return manifest_relation }
+    } else if kind == "hardlink" {
+        path(s[25], false)?
+        if s[24] != s[25] || !digest(s[9]) || s[23] != "" || n[35] != 0 || n[36] != 0 { return manifest_relation }
+    } else if kind == "dir" || kind == "deleted" {
+        if n[8] != 0 || s[9] != "" || s[23] != "" || s[24] != "" || s[25] != "" || n[35] != 0 || n[36] != 0 { return manifest_relation }
+        if kind == "deleted" {
+            for k in [18, 19, 20, 26, 27, 28, 29, 30, 31, 32, 33, 34] { if n[k] != 0 { return manifest_relation } }
+            if s[21] != "" || s[22] != "" { return manifest_relation }
+        }
+    } else { return manifest_relation }
+}
+fn validate(m: Manifest) -> () ! Errors {
+    var phase = 0; var controls = 0; var file_count = 0; var logical = 0; var stored = 0; var extent_count = 0
+    var last_object = ""; var last_file = ""; var last_selection = ""; var last_kind = ""; var last_mount = ""; var last_exclusion = ""
+    var current = 0 - 1; var pending = 0; var extent_end = 0
+    for i in 0..m.records.len {
+        let r = m.records[i]; let s = r.strings; let n = r.numbers; let kind = s[0]
+        if phase == 7 { return manifest_order }
+        if kind != "extent" && pending != 0 { return manifest_relation }
+        if kind == "header" {
+            if i != 0 { return manifest_order }
+            if n[1] != 1 || s[3] != "pax-objects-v1" || !digest(s[4]) || !digest(s[5]) || s[6] == "" { return manifest_schema }
+            phase = 1
+        } else if kind == "control" {
+            if phase != 1 || controls >= 3 { return manifest_order }
+            let names = ["control/accounts", "control/config-defaults", "control/installed"]
+            if s[7] != names[controls] { return manifest_order }
+            if !digest(s[9]) { return manifest_relation }; controls += 1
+        } else {
+            if controls != 3 { return manifest_order }
+            if kind == "selection" {
+                if phase > 2 { return manifest_order }; phase = 2
+                path(s[10], true)?
+                if !(s[11] == "home" || s[11] == "config" || s[11] == "local-data" || s[11] == "audit" || s[11] == "accounts") || s[12] == "" || s[13] != "" && !digest(s[13]) { return manifest_relation }
+                if last_mount != "" && (s[10] < last_selection || s[10] == last_selection && (s[11] < last_kind || s[11] == last_kind && s[12] <= last_mount)) { return manifest_order }
+                last_selection = copy s[10]; last_kind = copy s[11]; last_mount = copy s[12]
+            } else if kind == "exclusion" {
+                if phase > 3 { return manifest_order }; phase = 3
+                path(s[10], false)?
+                if last_exclusion != "" && s[10] <= last_exclusion { return manifest_order }; last_exclusion = copy s[10]
+                let reasons = ["unchanged_base", "boot_state", "pseudo_filesystem", "runtime_state", "temporary_state", "authentication_cache", "generated_network_state", "disposable_cache", "backup_destination", "explicit_owner_choice"]
+                var known = false; for reason in reasons { if reason == s[14] { known = true } }
+                if !known || s[14] == "explicit_owner_choice" && n[15] != 1 { return manifest_relation }
+                for previous in m.records { if previous.strings[0] == "selection" && previous.strings[10] == s[10] { return manifest_relation } }
+            } else if kind == "object" {
+                if phase > 4 { return manifest_order }; phase = 4
+                if !digest(s[16]) || s[7] != "objects/{s[16]}" { return manifest_relation }
+                if last_object != "" && s[16] <= last_object { return manifest_order }; last_object = copy s[16]
+                stored = add(stored, n[8])?
+            } else if kind == "file" {
+                if phase > 5 { return manifest_order }; phase = 5
+                file_rules(r)?
+                if last_file != "" && s[10] <= last_file { return manifest_order }; last_file = copy s[10]
+                file_count += 1; logical = add(logical, n[8])?
+                current = i; pending = n[36]; extent_end = 0
+                if pending > 4096 { return manifest_budget }
+                if s[17] == "file" && n[35] == 0 || s[17] == "symlink" { if object_length(m, s[23])? != n[8] { return manifest_relation } }
+            } else if kind == "extent" {
+                if phase != 5 || current < 0 || pending <= 0 { return manifest_order }
+                let f = m.records[current]
+                if f.strings[17] != "file" || f.numbers[35] != 1 || s[10] != f.strings[10] || n[8] <= 0 || n[37] < extent_end || n[37] > f.numbers[8] || n[8] > f.numbers[8] - n[37] { return manifest_relation }
+                let size = object_length(m, s[23])?
+                if n[38] > size || n[8] > size - n[38] { return manifest_relation }
+                extent_end = n[37] + n[8]; pending -= 1; extent_count += 1
+            } else if kind == "end" {
+                if n[39] != file_count || n[40] != m.objects.len || n[36] != extent_count || n[41] != logical || n[42] != stored { return manifest_relation }
+                phase = 7
+            } else { return manifest_order }
+        }
+    }
+    if phase != 7 { return manifest_truncated }
+    for id in m.files {
+        let r = m.records[id]; let s = r.strings
+        let b = s[10].bytes()
+        for i in 0..b.len {
+            if b[i] == 47 as byte {
+                let parent = find(m, m.files, s[10][0..i], 10)
+                if parent < 0 || m.records[parent].strings[17] != "dir" { return manifest_relation }
+            }
+        }
+        if s[17] == "hardlink" {
+            let target = find(m, m.files, s[25], 10)
+            if target < 0 { return manifest_relation }
+            let t = m.records[target]
+            if t.strings[17] != "file" || t.strings[24] != s[24] { return manifest_relation }
+            for k in [9, 21, 22] { if t.strings[k] != s[k] { return manifest_relation } }
+            for k in [8, 18, 19, 20, 26, 27, 28, 29, 30, 31, 32, 33, 34] { if t.numbers[k] != r.numbers[k] { return manifest_relation } }
+        }
+    }
+}
+
+/// Borrow an input handle through exact terminal EOF. No target or source paths.
+/// Application profile is capped independently of any caller-provided integer.
+pub fn parse(mut source: fs.File, profile: Profile) -> Manifest ! Errors {
+    if profile.records < 5 || profile.records > 4096 || profile.input_bytes < 1 || profile.input_bytes > 16777216 || profile.text_bytes < 1 || profile.text_bytes > 8388608 { return manifest_budget }
+    var result = Manifest { records: List[Record](), objects: List[int](), files: List[int](), extents: List[int]() }
+    var line = List[byte](); var input = 0; var retained = 0; var ended = false
+    var buffer = List[byte]()
+    while !ended {
+        let count = fs.read_into(mut source, mut buffer, 131072) else |e| match e { eof => { ended = true; 0 }, io => { return manifest_io } }
+        if !ended && count <= 0 { return manifest_io }
+        for b in buffer {
+            if input >= profile.input_bytes { return manifest_budget }; input += 1
+            if line.len >= 1048576 { return manifest_budget }
+            (mut line).push(b)
+            if b == 10 as byte {
+                if result.records.len >= profile.records { return manifest_budget }
+                if result.records.len > 0 && result.records[result.records.len - 1].strings[0] == "end" { return manifest_order }
+                region line_scratch {
+                    let parsed = record(line[0..line.len - 1])?
+                    var saved = blank()
+                    for i in 0..43 {
+                        if parsed.strings[i].len > profile.text_bytes - retained { return manifest_budget }
+                        retained += parsed.strings[i].len
+                        saved.strings[i] = copy parsed.strings[i]; saved.numbers[i] = parsed.numbers[i]; saved.present[i] = parsed.present[i]
+                    }
+                    let i = result.records.len
+                    if saved.strings[0] == "object" { (mut result.objects).push(i) }
+                    if saved.strings[0] == "file" { (mut result.files).push(i) }
+                    if saved.strings[0] == "extent" { (mut result.extents).push(i) }
+                    (mut result.records).push(saved)
+                }
+                line = List[byte]()
+            }
+        }
+        buffer = List[byte]()
+    }
+    if line.len != 0 { return manifest_truncated }
+    validate(result)?
+    result
+}

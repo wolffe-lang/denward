@@ -3,4 +3,5 @@ pkg {
     version: "0.0.0",
     edition: "1",
     capabilities: [env, fs],
+    deps: { manifest: { path: "../../../src/manifest" }, inventory: { path: "../../../src/inventory" } },
 }

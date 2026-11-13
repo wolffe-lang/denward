@@ -1,0 +1,6 @@
+pkg {
+    name: "wolffe-lang/denward-manifest",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [fs],
+}

@@ -1,5 +1,25 @@
-//! Red-first placeholder. Deliberately accepts every input until the reader lands.
+//! Test-only reader; safe reason names, never input contents.
+use manifest
+use inventory
+use std.fs
 fn main() -> int {
+    if inventory.reason() != "inventory_host_unqualified" { return 2 }
+    var source = fs.stdin()
+    let parsed = manifest.parse(mut source, manifest.test_profile()) else |e| {
+        match e {
+            manifest_syntax => print("manifest_syntax"),
+            manifest_duplicate_key => print("manifest_duplicate_key"),
+            manifest_schema => print("manifest_schema"),
+            manifest_budget => print("manifest_budget"),
+            manifest_order => print("manifest_order"),
+            manifest_relation => print("manifest_relation"),
+            manifest_path => print("manifest_path"),
+            manifest_truncated => print("manifest_truncated"),
+            manifest_io => print("manifest_io"),
+        }
+        return 1
+    }
+    if parsed.records.len < 5 { return 2 }
     print("parsed")
     0
 }

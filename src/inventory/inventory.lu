@@ -1,0 +1,4 @@
+//! Fail-closed inventory boundary. No paths are opened and no capacity is claimed.
+/// Internal prerequisite name, not a new CLI success/refusal taxonomy.
+/// Bounded traversal, metadata census, sparse maps and host assurance are absent.
+pub fn reason() -> str { "inventory_host_unqualified" }
