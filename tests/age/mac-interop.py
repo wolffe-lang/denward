@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 import platform
+import resource
+import time
 from pathlib import Path
 import subprocess
 
@@ -14,6 +16,7 @@ PINS = {'age': 'eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b2c
 
 
 def main():
+    started = time.monotonic()
     p = argparse.ArgumentParser()
     p.add_argument('--phase', choices=['mac-write', 'oracle', 'mac-read'], required=True)
     p.add_argument('--program', type=Path)
@@ -94,6 +97,14 @@ def main():
                 raise ValueError('wrong identity accepted or plaintext released')
             print('PASS interop/mac-wrong-identity/' + str(size), flush=True)
             report['rows'].append(dict(size=size, or_recovery_paths=2, wrong_identity_refused=True))
+    own = resource.getrusage(resource.RUSAGE_SELF)
+    children = resource.getrusage(resource.RUSAGE_CHILDREN)
+    report['cpu_seconds'] = own.ru_utime + own.ru_stime + children.ru_utime + children.ru_stime
+    report['elapsed_seconds'] = time.monotonic() - started
+    report['average_busy_cpus'] = report['cpu_seconds'] / report['elapsed_seconds']
+    if hasattr(os, 'sched_getaffinity'):
+        report['affinity'] = sorted(os.sched_getaffinity(0))
+    print('CAPACITY average_busy_cpus=' + str(round(report['average_busy_cpus'], 3)), flush=True)
     (a.output / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
     return 0
 

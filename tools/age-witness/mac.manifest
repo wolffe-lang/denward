@@ -1,0 +1,14 @@
+rig mac.manifest committed=../..:HEAD:tools/age-witness/mac.manifest
+rig mac-step.sh committed=../..:HEAD:tools/age-witness/mac-step.sh
+rig mac-step.py committed=../..:HEAD:tools/age-witness/mac-step.py
+rig oracle.sh committed=../..:HEAD:tools/age-witness/oracle.sh
+rig ../age-gate.py committed=../..:HEAD:tools/age-gate.py
+rig ../capture-age-code.py committed=../..:HEAD:tools/capture-age-code.py
+rig ../../tests/age/check.py committed=../..:HEAD:tests/age/check.py
+rig ../../tests/age/hostile.py committed=../..:HEAD:tests/age/hostile.py
+rig ../../tests/age/seams.py committed=../..:HEAD:tests/age/seams.py
+rig ../../tests/age/seams/fake_fs.lu committed=../..:HEAD:tests/age/seams/fake_fs.lu
+rig ../../tests/age/mac-interop.py committed=../..:HEAD:tests/age/mac-interop.py
+step mac-codec tools=bash,python3,git,clang script=mac-step.sh -- source
+step mac-oracle needs=mac-codec tools=bash,python3,ssh,scp script=mac-step.sh -- oracle
+step mac-read-capture needs=mac-oracle tools=bash,python3,git,clang,nm,otool script=mac-step.sh -- finish
