@@ -125,7 +125,7 @@ fn expected(kind: str) -> List[str] {
 }
 fn record(raw: List[byte]) -> Record ! Errors {
     let _valid = str_from_utf8(raw) else |_| { return manifest_syntax }
-    var c = Cursor { raw: raw, at: 0 }
+    var c = Cursor { raw: copy raw, at: 0 }
     var r = blank()
     ws(mut c); take_byte(mut c, 123)?; ws(mut c)
     if peek(c) == 125 { return manifest_schema }
@@ -192,8 +192,7 @@ fn find(m: Manifest, refs: List[int], value: str, slot: int) -> int {
     var low = 0; var high = refs.len
     while low < high {
         let mid = low + (high - low) / 2
-        let r = m.records[refs[mid]]
-        if r.strings[slot] < value { low = mid + 1 } else { high = mid }
+        if m.records[refs[mid]].strings[slot] < value { low = mid + 1 } else { high = mid }
     }
     if low < refs.len && m.records[refs[low]].strings[slot] == value { return refs[low] }
     0 - 1
@@ -234,7 +233,8 @@ fn validate(m: Manifest) -> () ! Errors {
     var last_object = ""; var last_file = ""; var last_selection = ""; var last_kind = ""; var last_mount = ""; var last_exclusion = ""
     var current = 0 - 1; var pending = 0; var extent_end = 0
     for i in 0..m.records.len {
-        let r = m.records[i]; let s = r.strings; let n = r.numbers; let kind = s[0]
+        region validation_record {
+        let r = copy m.records[i]; let s = copy r.strings; let n = copy r.numbers; let kind = copy s[0]
         if phase == 7 { return manifest_order }
         if kind != "extent" && pending != 0 { return manifest_relation }
         if kind == "header" {
@@ -277,7 +277,7 @@ fn validate(m: Manifest) -> () ! Errors {
                 if s[17] == "file" && n[35] == 0 || s[17] == "symlink" { if object_length(m, s[23])? != n[8] { return manifest_relation } }
             } else if kind == "extent" {
                 if phase != 5 || current < 0 || pending <= 0 { return manifest_order }
-                let f = m.records[current]
+                let f = copy m.records[current]
                 if f.strings[17] != "file" || f.numbers[35] != 1 || s[10] != f.strings[10] || n[8] <= 0 || n[37] < extent_end || n[37] > f.numbers[8] || n[8] > f.numbers[8] - n[37] { return manifest_relation }
                 let size = object_length(m, s[23])?
                 if n[38] > size || n[8] > size - n[38] { return manifest_relation }
@@ -287,10 +287,12 @@ fn validate(m: Manifest) -> () ! Errors {
                 phase = 7
             } else { return manifest_order }
         }
+        }
     }
     if phase != 7 { return manifest_truncated }
     for id in m.files {
-        let r = m.records[id]; let s = r.strings
+        region file_relation {
+        let r = copy m.records[id]; let s = copy r.strings
         let b = s[10].bytes()
         for i in 0..b.len {
             if b[i] == 47 as byte {
@@ -301,10 +303,11 @@ fn validate(m: Manifest) -> () ! Errors {
         if s[17] == "hardlink" {
             let target = find(m, m.files, s[25], 10)
             if target < 0 { return manifest_relation }
-            let t = m.records[target]
+            let t = copy m.records[target]
             if t.strings[17] != "file" || t.strings[24] != s[24] { return manifest_relation }
             for k in [9, 21, 22] { if t.strings[k] != s[k] { return manifest_relation } }
             for k in [8, 18, 19, 20, 26, 27, 28, 29, 30, 31, 32, 33, 34] { if t.numbers[k] != r.numbers[k] { return manifest_relation } }
+        }
         }
     }
 }
