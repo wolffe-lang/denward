@@ -1,7 +1,9 @@
 //! Test-only reader; safe reason names, never input contents.
+
 use manifest
 use inventory
 use std.fs
+
 fn main() -> int {
     if inventory.reason() != "inventory_host_unqualified" { return 2 }
     var source = fs.stdin()
