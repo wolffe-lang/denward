@@ -1,0 +1,6 @@
+pkg {
+    name: "wolffe-lang/denward-cli",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [],
+}

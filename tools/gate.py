@@ -89,7 +89,7 @@ def main():
     out = ROOT / 'target/bin'
     out.mkdir(parents=True, exist_ok=True)
     step('build-command', [str(wolf), 'build', '--deny-warnings', 'src/denward.lu', '-o', str(out / 'denward')], env)
-    step('build-unit', [str(wolf), 'build', '--deny-warnings', 'src/cli_test.lu', '-o', str(out / 'cli-unit')], env)
+    step('build-unit', [str(wolf), 'build', '--deny-warnings', 'src/unit/main.lu', '-o', str(out / 'cli-unit')], env)
     if actual == 'linux-x86_64':
         headers = subprocess.check_output(['readelf', '-l', str(out / 'denward')], text=True)
         if 'INTERP' in headers:

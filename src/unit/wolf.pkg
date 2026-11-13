@@ -1,0 +1,9 @@
+pkg {
+    name: "wolffe-lang/denward-unit",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [],
+    deps: {
+        cli: { path: "../cli" },
+    },
+}
