@@ -214,6 +214,9 @@ pub fn create_header(recipients: List[List[byte]]) -> Created ! CreationErrors {
 /// safety check here because this internal test surface accepts a Header value.
 /// A zero agreement aborts even alongside a usable stanza. Authentication is
 /// full-width and covers original transcript bytes, including unknown stanzas.
+/// Only the first identity-major/stanza candidate that unwraps controls the
+/// header MAC, even if a later candidate would authenticate. Returned file-key
+/// material is for verification only; never reuse it to create another payload.
 pub fn open_header(parsed: Header, identities: List[List[byte]]) -> List[byte] ! RecoveryErrors {
     if identities.len < 1 { return key }
     if identities.len > 64 || parsed.stanzas.len > 64 { return budget }
@@ -224,7 +227,6 @@ pub fn open_header(parsed: Header, identities: List[List[byte]]) -> List[byte] !
     }
     if parsed.stanzas.len == 0 { return unsupported }
     var selected = List[byte]()
-    var unwrapped = false
     for identity in identities {
         for stanza in parsed.stanzas {
             region attempt {
@@ -239,19 +241,17 @@ pub fn open_header(parsed: Header, identities: List[List[byte]]) -> List[byte] !
                     List[byte](),
                     stanza.body,
                 ) else |tag| { List[byte]() }
-                if candidate.len == 16 {
-                    unwrapped = true
-                    let want = header_tag(candidate, parsed.transcript)
-                    if bytes.is_equal_fixed_work(want, parsed.tag) {
-                        (mut selected).reset()
-                        append(mut selected, candidate)
-                    }
+                if candidate.len == 16 && selected.len == 0 {
+                    append(mut selected, candidate)
                 }
             }
         }
     }
-    if selected.len == 16 { return selected }
-    if unwrapped { return hmac }
+    if selected.len == 16 {
+        let want = header_tag(selected, parsed.transcript)
+        if bytes.is_equal_fixed_work(want, parsed.tag) { return selected }
+        return hmac
+    }
     no_match
 }
 
