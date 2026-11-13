@@ -58,8 +58,9 @@ def reference(data=b'abc', digest=ABC):
     return prefix() + record('objects/' + digest, data) + bytes(1024)
 
 
-def inspect(binary, raw):
-    p = subprocess.run([str(binary), 'inspect', str(len(raw))], input=raw, capture_output=True, timeout=60)
+def inspect(binary, raw, chunk=None):
+    args = [str(binary), 'inspect', str(len(raw))] + ([] if chunk is None else [str(chunk)])
+    p = subprocess.run(args, input=raw, capture_output=True, timeout=60)
     assert p.returncode == 0 and not p.stderr
     return p.stdout.strip()
 
@@ -179,7 +180,16 @@ def main():
             raise AssertionError('archive unit probe exit='+str(p.returncode))
     p = subprocess.run([str(binary), 'emit', '3', ABC], input=b'abc', capture_output=True, timeout=60)
     require(p.returncode == 0 and not p.stderr and p.stdout == reference(), 'A20-independent-canonical-wire')
+    contrast = subprocess.run(['tar', '-tf', '-'], input=p.stdout, capture_output=True, timeout=60)
+    names = [name.rstrip('/') for name in contrast.stdout.decode().splitlines()]
+    require(contrast.returncode == 0 and names == ['control','control/accounts','control/config-defaults','control/installed','control/manifest','objects','objects/'+ABC], 'A40-native-tar-read-only-contrast')
     hostile_rows(binary)
+    wide = bytes(range(256))*512
+    wide_digest = hashlib.sha256(wide).hexdigest()
+    p = subprocess.run([str(binary), 'emit', str(len(wide)), wide_digest, '131072'], input=wide, capture_output=True, timeout=60)
+    require(p.returncode == 0 and not p.stderr and p.stdout == reference(wide, wide_digest) and inspect(binary,p.stdout,131072) == b'physical:7', 'A41-maximum-chunk-new-toolchain')
+    p = subprocess.run([str(binary), 'emit', '3', ABC, '1'], input=b'abc', capture_output=True, timeout=60)
+    require(p.returncode == 0 and not p.stderr and p.stdout == reference() and inspect(binary,p.stdout,1) == b'physical:7', 'A42-one-byte-chunk-framing')
     for name, body, digest in [('A38-source-digest-failure', b'abc', EMPTY), ('A39-source-truncation', b'ab', ABC)]:
         p = subprocess.run([str(binary), 'emit', '3', digest], input=body, capture_output=True, timeout=60)
         require(p.returncode != 0 and p.stderr.startswith(b'archive:') and not p.stdout.endswith(bytes(1024)), name)
