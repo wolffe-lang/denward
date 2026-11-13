@@ -1,0 +1,15 @@
+Archive integration checkpoint prediction
+
+Base: current denward trunk. Upstream archive source: public paxage commit 2c69152ba9aa760ec5104b65a23ef961bfa83368, after its full hosted qualification.
+
+This checkpoint implements the safe physical archive layer of BR1, not a complete backup command. Pin and verify the exact reusable source/license closure, adapt borrowed-handle framing to control/object members, and verify complete physical inventories. Logical JSON records, filesystem selection, the separately measured inventory admission ceiling, encryption qualification/controller wiring and receive/commit/SSH remain subsequent BR1 work. No CLI data verb becomes successful here. Age code and its tests are outside this checkpoint.
+
+Expected behavior before implementation:
+1. Missing archive adapter fails the committed independent probe before its implementation.
+2. Vendored source/license bytes match a per-file SHA-256 provenance record at the exact public upstream revision. Packaging glue is separate and explicitly identified. No modified or omitted source file passes the dependency gate.
+3. Only control/accounts, control/config-defaults, control/installed, control/manifest and objects/<lowercase SHA-256> are regular members. Only control and objects are directory members. All four controls and both directories are mandatory and ordered; metadata is normalized. Physical symlinks, hardlinks and arbitrary logical home paths are refused.
+4. Each emitted regular member is hashed incrementally against an independently supplied expected digest; object names must match their data digest. Wrong length, source failure, wrong digest, unsafe name, missing control, invalid type and sink failure latch without a successful finish. Caller handles remain borrowed.
+5. Physical inspection reuses the pinned reader with explicit trusted limits, rejects extra/missing/malformed members and returns only a physical-validation claim. It never claims logical manifest validity, authenticated age content or recoverability.
+6. Independent byte vectors and hostile archives cover both directions, ragged/short reads, pipe backpressure, closed consumer and partial failures. A one-file/one-hunk off-line missing-digest-check plant fails by name.
+7. Compile on macOS first from a commit; bounded rows only. Standalone Linux preflight precedes one prepared take per committed checkpoint. Large/growth legs are capped Linux-only. Hosted full matrix is required before merge for subprocess/pipe/runtime-handle/filesystem rows.
+8. Existing CLI refusals remain byte-for-byte checked, including encrypted default, explicit local plaintext flags and SSH plaintext prohibition. No inventory admission or encryption prerequisite is waived by this internal API.
