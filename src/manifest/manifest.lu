@@ -11,18 +11,27 @@ pub struct Profile { records: int, input_bytes: int, text_bytes: int }
 /// Fixed schema slots, not a generic JSON value or executable input.
 pub struct Record { strings: List[str], numbers: List[int], present: List[bool] }
 /// Validated manifest relations only. Controls/object contents remain unchecked.
-pub struct Manifest { records: List[Record], objects: List[int], files: List[int], extents: List[int] }
+pub struct Manifest { records: List[Record], objects: List[int], files: List[int], selections: List[int], extents: List[int] }
 struct Cursor { raw: List[byte], at: int }
 
 /// Hard maximum for the test-only parser, not a source-inventory capacity.
 pub fn test_profile() -> Profile { Profile { records: 4096, input_bytes: 16777216, text_bytes: 8388608 } }
-fn keys() -> List[str] {
-    ["record", "schema", "features", "archive_profile", "source_release", "source_manifest", "tool_version", "archive_path", "length", "sha256", "path", "kind", "mount_identity", "baseline_sha256", "reason", "explicit", "id", "type", "mode", "uid", "gid", "user", "group", "object", "link_group", "target", "atime_sec", "atime_nsec", "mtime_sec", "mtime_nsec", "ctime_sec", "ctime_nsec", "birthtime_present", "birthtime_sec", "birthtime_nsec", "sparse", "extent_count", "offset", "object_offset", "file_count", "object_count", "logical_bytes", "stored_object_bytes"]
-}
 fn index(key: str) -> int {
-    let names = keys()
-    for i in 0..names.len { if names[i] == key { return i } }
-    0 - 1
+    match key {
+        "record" => 0, "schema" => 1, "features" => 2, "archive_profile" => 3,
+        "source_release" => 4, "source_manifest" => 5, "tool_version" => 6,
+        "archive_path" => 7, "length" => 8, "sha256" => 9, "path" => 10,
+        "kind" => 11, "mount_identity" => 12, "baseline_sha256" => 13,
+        "reason" => 14, "explicit" => 15, "id" => 16, "type" => 17,
+        "mode" => 18, "uid" => 19, "gid" => 20, "user" => 21, "group" => 22,
+        "object" => 23, "link_group" => 24, "target" => 25, "atime_sec" => 26,
+        "atime_nsec" => 27, "mtime_sec" => 28, "mtime_nsec" => 29,
+        "ctime_sec" => 30, "ctime_nsec" => 31, "birthtime_present" => 32,
+        "birthtime_sec" => 33, "birthtime_nsec" => 34, "sparse" => 35,
+        "extent_count" => 36, "offset" => 37, "object_offset" => 38,
+        "file_count" => 39, "object_count" => 40, "logical_bytes" => 41,
+        "stored_object_bytes" => 42, _ => 0 - 1,
+    }
 }
 fn scalar_kind(k: int) -> int {
     if k == 2 { return 3 }
@@ -261,7 +270,7 @@ fn validate(m: Manifest) -> () ! Errors {
                 let reasons = ["unchanged_base", "boot_state", "pseudo_filesystem", "runtime_state", "temporary_state", "authentication_cache", "generated_network_state", "disposable_cache", "backup_destination", "explicit_owner_choice"]
                 var known = false; for reason in reasons { if reason == s[14] { known = true } }
                 if !known || s[14] == "explicit_owner_choice" && n[15] != 1 { return manifest_relation }
-                for previous in m.records { if previous.strings[0] == "selection" && previous.strings[10] == s[10] { return manifest_relation } }
+                if find(m, m.selections, s[10], 10) >= 0 { return manifest_relation }
             } else if kind == "object" {
                 if phase > 4 { return manifest_order }; phase = 4
                 if !digest(s[16]) || s[7] != "objects/{s[16]}" { return manifest_relation }
@@ -316,13 +325,14 @@ fn validate(m: Manifest) -> () ! Errors {
 /// Application profile is capped independently of any caller-provided integer.
 pub fn parse(mut source: fs.File, profile: Profile) -> Manifest ! Errors {
     if profile.records < 5 || profile.records > 4096 || profile.input_bytes < 1 || profile.input_bytes > 16777216 || profile.text_bytes < 1 || profile.text_bytes > 8388608 { return manifest_budget }
-    var result = Manifest { records: List[Record](), objects: List[int](), files: List[int](), extents: List[int]() }
+    var result = Manifest { records: List[Record](), objects: List[int](), files: List[int](), selections: List[int](), extents: List[int]() }
     var line = List[byte](); var input = 0; var retained = 0; var ended = false
     var buffer = List[byte]()
     while !ended {
         let count = fs.read_into(mut source, mut buffer, 131072) else |e| match e { eof => { ended = true; 0 }, io => { return manifest_io } }
         if !ended && count <= 0 { return manifest_io }
         for b in buffer {
+            if result.records.len > 0 && result.records[result.records.len - 1].strings[0] == "end" { return manifest_order }
             if input >= profile.input_bytes { return manifest_budget }; input += 1
             if line.len >= 1048576 { return manifest_budget }
             (mut line).push(b)
@@ -338,10 +348,11 @@ pub fn parse(mut source: fs.File, profile: Profile) -> Manifest ! Errors {
                         saved.strings[i] = copy parsed.strings[i]; saved.numbers[i] = parsed.numbers[i]; saved.present[i] = parsed.present[i]
                     }
                     let i = result.records.len
+                    if saved.strings[0] == "selection" { (mut result.selections).push(i) }
                     if saved.strings[0] == "object" { (mut result.objects).push(i) }
                     if saved.strings[0] == "file" { (mut result.files).push(i) }
                     if saved.strings[0] == "extent" { (mut result.extents).push(i) }
-                    (mut result.records).push(saved)
+                    (mut result.records).push(copy saved)
                 }
                 line = List[byte]()
             }
