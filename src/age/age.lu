@@ -5,6 +5,11 @@
 use std.bech32
 use std.base64
 use std.str as text
+use std.bytes
+use std.os.random
+use std.x.crypto.curve25519
+use std.x.crypto.sha2
+use std.x.crypto.chacha20
 
 /// Exact native X25519 recipient, one case, BIP-173 and canonical 32 bytes.
 /// `key` never contains input or a repaired spelling.
@@ -127,4 +132,128 @@ pub fn parse_header(raw: List[byte]) -> Header ! HeaderErrors {
         }
     }
     header
+}
+
+/// Creation admission: malformed recipient, bounded work, or unqualified OS.
+/// Provider failure after admission still traps under the pinned std contract.
+pub error CreationErrors = {key, budget, entropy_unqualified}
+
+/// Header recovery: bad key input or syntax, work cap, unsupported profile,
+/// no recipient match, or full header-MAC failure. No input in a row value.
+pub error RecoveryErrors = {key, header, budget, unsupported, no_match, hmac}
+
+/// New-session internal state, not a published file or backup receipt.
+/// File keys are confidential ordinary region-owned bytes, not erased storage.
+pub struct Created {
+    raw: List[byte],
+    file_key: List[byte],
+    payload_nonce: List[byte],
+}
+
+fn append(mut dst: List[byte], src: List[byte]) {
+    for b in src { (mut dst).push(b) }
+}
+
+fn zeros(n: int) -> List[byte] {
+    var out = List[byte]()
+    for _ in 0..n { (mut out).push(0 as byte) }
+    out
+}
+
+fn wrapping_key(share: List[byte], recipient: List[byte], shared: List[byte]) -> List[byte] {
+    var salt = copy share
+    append(mut salt, recipient)
+    sha2.hkdf256(salt, shared, "age-encryption.org/v1/X25519".bytes(), 32)
+}
+
+fn header_tag(file_key: List[byte], transcript: List[byte]) -> List[byte] {
+    let h = sha2.hkdf256(List[byte](), file_key, "header".bytes(), 32)
+    sha2.hmac256(h, transcript)
+}
+
+/// Create an ordinary age X25519 header using only the guarded OS source.
+/// All draws and wraps complete before returning any ciphertext to a caller.
+/// There is no deterministic-entropy parameter or production fallback.
+pub fn create_header(recipients: List[List[byte]]) -> Created ! CreationErrors {
+    if recipients.len < 1 { return key }
+    if recipients.len > 64 { return budget }
+    for r in recipients { if r.len != 32 { return key } }
+    random.require_ready()?
+    let draws = random.bytes(32 + 32 * recipients.len)?
+    let file_key = draws[0..16]
+    let payload_nonce = draws[16..32]
+    var raw = "age-encryption.org/v1\n".bytes()
+    for i in 0..recipients.len {
+        // Copy only the public stanza bytes out. Temporary scalar, agreement,
+        // salt and wrapping-key allocations end here; no erasure is claimed.
+        region stanza {
+            let ephemeral = draws[32 + 32 * i..64 + 32 * i]
+            let share = curve25519.x25519_base(ephemeral)
+            let shared = curve25519.x25519(ephemeral, recipients[i]) else |zero| { return key }
+            let wrap_key = wrapping_key(share, recipients[i], shared)
+            let body = chacha20.seal(wrap_key, zeros(12), List[byte](), file_key)
+            let line = "-> X25519 {base64.encode_raw(share)}\n{base64.encode_raw(body)}\n"
+            append(mut raw, line.bytes())
+        }
+    }
+    append(mut raw, "---".bytes())
+    let tag = header_tag(file_key, raw)
+    append(mut raw, " {base64.encode_raw(tag)}\n".bytes())
+    Created { raw: raw, file_key: file_key, payload_nonce: payload_nonce }
+}
+
+/// Deterministic header recovery. Never calls require_ready or draws entropy.
+/// All structurally known stanzas were validated by parse_header. Repeat that
+/// safety check here because this internal test surface accepts a Header value.
+/// A zero agreement aborts even alongside a usable stanza. Authentication is
+/// full-width and covers original transcript bytes, including unknown stanzas.
+pub fn open_header(parsed: Header, identities: List[List[byte]]) -> List[byte] ! RecoveryErrors {
+    if identities.len < 1 { return key }
+    if identities.len > 64 || parsed.stanzas.len > 64 { return budget }
+    if parsed.stanzas.len > 64 / identities.len { return budget }
+    for s in identities { if s.len != 32 { return key } }
+    for stanza in parsed.stanzas {
+        if stanza.share.len != 32 || stanza.body.len != 32 { return header }
+    }
+    if parsed.stanzas.len == 0 { return unsupported }
+    var selected = List[byte]()
+    var unwrapped = false
+    for identity in identities {
+        for stanza in parsed.stanzas {
+            region attempt {
+                let recipient = curve25519.x25519_base(identity)
+                let shared = curve25519.x25519(identity, stanza.share) else |zero| { return header }
+                let wrap_key = wrapping_key(stanza.share, recipient, shared)
+                let candidate = chacha20.open(wrap_key, zeros(12), List[byte](), stanza.body) else |tag| { List[byte]() }
+                if candidate.len == 16 {
+                    unwrapped = true
+                    let want = header_tag(candidate, parsed.transcript)
+                    if bytes.is_equal_fixed_work(want, parsed.tag) {
+                        (mut selected).reset()
+                        append(mut selected, candidate)
+                    }
+                }
+            }
+        }
+    }
+    if selected.len == 16 { return selected }
+    if unwrapped { return hmac }
+    no_match
+}
+
+/// Increment the full 88-bit big-endian STREAM counter. `budget` refuses a
+/// malformed width or carry beyond the last value, before any nonce reuse.
+pub fn next_counter(counter: List[byte]) -> List[byte] ! {budget} {
+    if counter.len != 11 { return budget }
+    var out = copy counter
+    var i = 11
+    while i > 0 {
+        i -= 1
+        if out[i] != 255 as byte {
+            out[i] = (out[i] as int + 1) as byte
+            return out
+        }
+        out[i] = 0 as byte
+    }
+    budget
 }
