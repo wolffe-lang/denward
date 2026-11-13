@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/wolffe-lang/paxage",
+  "revision": "2c69152ba9aa760ec5104b65a23ef961bfa83368",
+  "files": [
+    {
+      "path": "packing/packing.lu",
+      "upstream_path": "src/packing/packing.lu",
+      "sha256": "0a4fd4534f5ed75911872880b9c8f345302596245b802f3b7efc344d4c90c231",
+      "git_blob": "770ae6ed3444c79053c7e3d07e7ec8a1f8ddcedc"
+    },
+    {
+      "path": "payload/payload.lu",
+      "upstream_path": "src/payload/payload.lu",
+      "sha256": "9775932d954b1bd437f87f9891a31971487996e56615c35c2f03dfac218d48b7",
+      "git_blob": "9229bc8b103416c89a9659ef5e72e626e7a3bc09"
+    },
+    {
+      "path": "literal/literal.lu",
+      "upstream_path": "src/literal/literal.lu",
+      "sha256": "be44a0d058843c2d9c203168b9ffaf358b0ad89c8c8834108c729ff2c35774de",
+      "git_blob": "3b764eff6432b13dee539513b10367d5f8cc79f5"
+    },
+    {
+      "path": "schema/schema.lu",
+      "upstream_path": "src/schema/schema.lu",
+      "sha256": "2751a943214a1c9205ac091374988bfa337f09411f8117201c86a75ff4e7b1f9",
+      "git_blob": "fc525e7be231985e88aaaf240159e36188f72069"
+    },
+    {
+      "path": "model/model.lu",
+      "upstream_path": "src/model/model.lu",
+      "sha256": "e462d0ab464e4f8469e0b08e5d670cc85334f27d6de2e7e681fbed21eca9a202",
+      "git_blob": "d18ac021d0d6acb95b8749f777ed08279121e115"
+    },
+    {
+      "path": "version/version.lu",
+      "upstream_path": "src/version/version.lu",
+      "sha256": "47f69722f2d0a63f48d15bedf98486af023199b2ec28eaff16753b625be2efe8",
+      "git_blob": "6225ad5209eef6ac296a1d4d85c2322f66e5f732"
+    },
+    {
+      "path": "LICENSE",
+      "upstream_path": "LICENSE",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "git_blob": "f288702d2fa16d3cdf0035b15a9fcbc552cd88e7"
+    },
+    {
+      "path": "LICENSE-TRAINING-DATA",
+      "upstream_path": "LICENSE-TRAINING-DATA",
+      "sha256": "39d16667f8215642b3e1f6b65c5169dc4ca288c5cef87b17f2c16a0be5a74da3",
+      "git_blob": "31a3e92b5b9aaeb49fc9dc752f76bc2a27c781eb"
+    }
+  ],
+  "local_package_glue": [
+    {
+      "path": "packing/wolf.pkg",
+      "sha256": "11bcd1ecafb22eebdefaa5d9f202d578819a16a237163a9f88e27021b6ab855d"
+    },
+    {
+      "path": "payload/wolf.pkg",
+      "sha256": "ab868ce7f4940226db2d9e507979324b6393cd446d0951f6b196bcd48d3ccdd3"
+    },
+    {
+      "path": "literal/wolf.pkg",
+      "sha256": "64364c70e4dfd99877a8a1a20e2d033e20e05191369c262a5e57ae97587f1513"
+    },
+    {
+      "path": "schema/wolf.pkg",
+      "sha256": "a00ed6f54d84fbea59a6c14a9e6cd5dcdcf03c47c987bbd229aa082d85297ab1"
+    },
+    {
+      "path": "model/wolf.pkg",
+      "sha256": "40924466b1ab4e2a138af7501b29a77a39ca24f9dfd5e6f93f5403df05e88afe"
+    },
+    {
+      "path": "version/wolf.pkg",
+      "sha256": "4daf930af176363392aba2783ab93afb62c12b5ec33ec121b5c2508aa8f203d1"
+    }
+  ]
+}

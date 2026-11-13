@@ -1,0 +1,203 @@
+//! Standalone bounded literal-data parser; never imports the compiler/evaluator.
+
+/// Flat AST value. Parent links avoid recursively owned values.
+pub struct Node {
+    parent: int,
+    key: str,
+    kind: str,
+    text: str,
+    number: int,
+}
+
+/// Parse result; no AST may be consumed when error is nonempty.
+pub struct Data {
+    nodes: List[Node],
+    error: str,
+}
+
+struct Parser {
+    bytes: List[byte],
+    pos: int,
+    nodes: List[Node],
+    error: str,
+}
+
+fn peek(p: Parser) -> int {
+    if p.pos >= p.bytes.len { return -1 }
+    p.bytes[p.pos] as int
+}
+
+fn space(mut p: Parser) {
+    if p.error != "" { return }
+    while peek(p) == 32 || peek(p) == 9 || peek(p) == 10 || peek(p) == 13 { p.pos += 1 }
+    if peek(p) == 47 { p.error = "comment" }
+}
+
+fn ident_start(c: int) -> bool { c >= 97 && c <= 122 || c == 95 }
+
+fn ident_more(c: int) -> bool { ident_start(c) || c >= 48 && c <= 57 }
+
+fn identifier(mut p: Parser) -> str {
+    var b = List[byte]()
+    if !ident_start(peek(p)) { p.error = "syntax"; return "" }
+    while ident_more(peek(p)) {
+        (mut b).push(peek(p) as byte)
+        p.pos += 1
+    }
+    str_from_utf8(b) else |_| { "" }
+}
+
+fn string(mut p: Parser) -> str {
+    p.pos += 1
+    var b = List[byte]()
+    while p.pos < p.bytes.len {
+        var c = peek(p)
+        p.pos += 1
+        if c == 34 {
+            return str_from_utf8(b) else |_| { p.error = "bad-utf8"; "" }
+        }
+        if c < 32 || c == 127 { p.error = "control-byte"; return "" }
+        if c == 123 || c == 125 {
+            if peek(p) != c { p.error = "interpolation"; return "" }
+            p.pos += 1
+        } else if c == 92 {
+            c = peek(p)
+            p.pos += 1
+            if c == 110 {
+                c = 10
+            } else if c == 114 {
+                c = 13
+            } else if c == 116 {
+                c = 9
+            } else if c != 92 && c != 34 {
+                p.error = "bad-escape"
+                return ""
+            }
+        }
+        (mut b).push(c as byte)
+        if b.len > 65536 { p.error = "string-limit"; return "" }
+    }
+    p.error = "syntax"
+    ""
+}
+
+fn add(mut p: Parser, parent: int, key: str, kind: str, value: str, number: int) -> int {
+    if p.nodes.len >= 16384 { p.error = "node-limit"; return -1 }
+    let id = p.nodes.len
+    (mut p.nodes).push(Node { parent, key, kind, text: value, number })
+    id
+}
+
+fn value(mut p: Parser, parent: int, key: str, depth: int) {
+    space(mut p)
+    if p.error != "" { return }
+    let c = peek(p)
+    if c == 34 {
+        let s = string(mut p)
+        let _n = add(mut p, parent, key, "string", s, 0)
+        return
+    }
+    if c >= 48 && c <= 57 {
+        var n: int = 0
+        while peek(p) >= 48 && peek(p) <= 57 {
+            let d = peek(p) - 48
+            if n > 922337203685477580 || n == 922337203685477580 && d > 7 {
+                p.error = "integer-overflow"
+                return
+            }
+            n = n * 10 + d
+            p.pos += 1
+        }
+        let _n = add(mut p, parent, key, "int", "", n)
+        return
+    }
+    var tag = ""
+    var kind = "list"
+    var close = 93
+    if c != 91 {
+        if !ident_start(c) { p.error = "expression"; return }
+        tag = identifier(mut p)
+        if tag == "true" || tag == "false" {
+            let _n = add(mut p, parent, key, "bool", tag, 0)
+            return
+        }
+        space(mut p)
+        if p.error != "" { return }
+        if peek(p) != 123 { p.error = "expression"; return }
+        kind = "object"
+        close = 125
+    }
+    if depth >= 32 { p.error = "depth-limit"; return }
+    p.pos += 1
+    let id = add(mut p, parent, key, kind, tag, 0)
+    if p.error != "" { return }
+    var keys = List[str]()
+    var count = 0
+    space(mut p)
+    while peek(p) != close && p.error == "" {
+        if count >= 4096 { p.error = "member-limit"; return }
+        var field = ""
+        if kind == "object" {
+            field = identifier(mut p)
+            if p.error != "" { return }
+            for old in keys {
+                if old == field { p.error = "duplicate-key"; return }
+            }
+            (mut keys).push(field)
+            space(mut p)
+            if p.error != "" { return }
+            if peek(p) != 58 { p.error = "syntax"; return }
+            p.pos += 1
+        }
+        value(mut p, id, field, depth + 1)
+        if p.error != "" { return }
+        count += 1
+        space(mut p)
+        if p.error != "" { return }
+        if peek(p) == close { break }
+        if peek(p) != 44 {
+            if peek(p) == 43 || peek(p) == 40 || peek(p) == 46 {
+                p.error = "expression"
+            } else {
+                p.error = "syntax"
+            }
+            return
+        }
+        p.pos += 1
+        space(mut p)
+    }
+    if p.error != "" { return }
+    if peek(p) != close { p.error = "syntax"; return }
+    p.pos += 1
+}
+
+/// Parse F2 bytes, enforcing UTF-8 and bounds before any interpretation.
+pub fn parse(bytes: List[byte]) -> Data {
+    if bytes.len > 1048576 { return Data { nodes: List[Node](), error: "byte-limit" } }
+    let _valid = str_from_utf8(bytes) else |_| {
+        return Data { nodes: List[Node](), error: "bad-utf8" }
+    }
+    var p = Parser { bytes: copy bytes, pos: 0, nodes: List[Node](), error: "" }
+    value(mut p, -1, "", 0)
+    space(mut p)
+    if p.error == "" && p.pos != p.bytes.len { p.error = "trailing-data" }
+    if p.error == "" && (p.nodes.len == 0 || p.nodes[0].kind != "object") { p.error = "syntax" }
+    Data { nodes: p.nodes, error: p.error }
+}
+
+/// Immediate child indices in wire order.
+pub fn children(d: Data, parent: int) -> List[int] {
+    var ids = List[int]()
+    for i in 0..d.nodes.len {
+        if d.nodes[i].parent == parent { (mut ids).push(i) }
+    }
+    ids
+}
+
+/// Lookup a unique object key; -1 means absent.
+pub fn field(d: Data, parent: int, key: str) -> int {
+    for i in 0..d.nodes.len {
+        if d.nodes[i].parent == parent && d.nodes[i].key == key { return i }
+    }
+    -1
+}

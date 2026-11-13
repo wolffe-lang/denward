@@ -1,0 +1,10 @@
+pkg {
+    name: "wolffe-lang/paxage-archive-payload",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [fs],
+    deps: {
+        schema: { path: "../schema" },
+        version: { path: "../version" },
+    },
+}

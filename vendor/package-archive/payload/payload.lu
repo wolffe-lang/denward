@@ -1,0 +1,531 @@
+//! F6 restricted pax. Original implementation from POSIX.1-2017 pax and FORMAT.
+//! No other archiver implementation is used. Buffers are bounded before reads.
+
+use schema
+use version
+use std.str as text
+use std.list as list
+use std.x.crypto.sha2 as sha2
+
+/// One validated logical installed record and its payload offset.
+pub struct Entry {
+    path: str,
+    kind: str,
+    mode: int,
+    owner: int,
+    group: int,
+    length: int,
+    hash: str,
+    target: str,
+    offset: int,
+}
+
+/// Bounded metadata inventory; error must be empty before use.
+pub struct Inventory { entries: List[Entry], error: str }
+
+/// Held file descriptor and a declared bounded input window.
+pub struct Stream { fd: int, pos: int, length: int, error: str }
+
+/// Incremental exact-byte digest result.
+pub struct Digest { hash: str, length: int, error: str }
+
+/// Trusted caller admission limits; never selected by archive input.
+pub struct Profile {
+    max_entries: int,
+    max_data_bytes: int,
+    max_extension_bytes: int,
+    chunk_bytes: int,
+}
+
+/// Existing package policy, unchanged for every CLI caller.
+pub fn package_profile() -> Profile {
+    Profile {
+        max_entries: 100000,
+        max_data_bytes: 17179869184,
+        max_extension_bytes: 1048576,
+        chunk_bytes: 65536,
+    }
+}
+
+/// Validate arithmetic/resource bounds before any profile-driven operation.
+pub fn profile_error(p: Profile) -> str {
+    if p.max_entries < 0 ||
+        p.max_data_bytes < 0 ||
+        p.max_extension_bytes < 0 ||
+        p.chunk_bytes < 1 ||
+        p.chunk_bytes > 131072 {
+        return "payload-profile"
+    }
+    ""
+}
+
+fn read_window(mut s: Stream, mut out: List[byte], n: int) {
+    if s.error != "" { return }
+    if n < 0 || n > 1048576 || s.pos > s.length || n > s.length - s.pos {
+        s.error = "payload-length"
+        return
+    }
+    (mut out).reset()
+    while out.len < n {
+        var count = 0
+        var failed = false
+        region chunk {
+            let got = fs_read_chunk(s.fd, n - out.len) else |_| { failed = true; List[byte]() }
+            for c in got { (mut out).push(c) }
+            count = got.len
+        }
+        if failed || count == 0 { s.error = "payload-truncated"; return }
+        s.pos += count
+    }
+}
+
+/// Exact bounded read, never seeking beyond the declared authenticated window.
+pub fn read(mut s: Stream, n: int) -> List[byte] {
+    var out = List[byte]()
+    read_window(mut s, mut out, n)
+    out
+}
+
+/// EOF or I/O failure from a bounded bulk byte read.
+pub error ChunkReadErrors = {eof, io}
+
+/// Read a caller-bounded bulk chunk into a reusable buffer. EOF/io are named.
+pub fn read_into(fd: int, mut buf: List[byte], max: int) -> int ! ChunkReadErrors {
+    var n = 0
+    region chunk {
+        let got = fs_read_chunk(fd, max)?
+        (mut buf).reset()
+        for b in got { (mut buf).push(b) }
+        n = got.len
+    }
+    n
+}
+
+/// Whether every supplied byte is zero.
+pub fn zero(b: List[byte]) -> bool {
+    for c in b { if c != 0 as byte { return false } }
+    true
+}
+
+fn slice(b: List[byte], a: int, n: int) -> List[byte] {
+    var out = List[byte]()
+    for i in a..a + n { (mut out).push(b[i]) }
+    out
+}
+
+/// Numeric accumulation guarded before every multiply/add; -1 is malformed.
+pub fn number(b: List[byte], base: int) -> int {
+    var n = 0
+    var ended = false
+    var digits = false
+    for c in b {
+        let v = c as int
+        if base == 8 && (v == 0 || v == 32) {
+            ended = true
+        } else {
+            if ended || v < 48 || v >= 48 + base { return -1 }
+            let d = v - 48
+            if n > (9223372036854775807 - d) / base { return -1 }
+            n = n * base + d
+            digits = true
+        }
+    }
+    if base == 10 && !digits { return -1 }
+    n
+}
+
+fn octal(h: List[byte], a: int, n: int) -> int {
+    if h[a + n - 1] != 0 as byte && h[a + n - 1] != 32 as byte { return -1 }
+    number(slice(h, a, n), 8)
+}
+
+fn string(h: List[byte], a: int, n: int) -> str {
+    var b = List[byte]()
+    var end = false
+    for i in a..a + n {
+        if h[i] == 0 as byte { end = true } else { if end { return "\n" }; (mut b).push(h[i]) }
+    }
+    str_from_utf8(b) else |_| { "\n" }
+}
+
+fn bad_text(s: str) -> bool {
+    for c in s.bytes() { if c < 32 as byte || c == 127 as byte { return true } }
+    false
+}
+
+/// F5 normalized nonreserved relative path validation.
+pub fn allowed_path(p: str) -> bool {
+    if !schema.path(p) { return false }
+    let head = text.split(p, "/")[0]
+    for r in ["home", "var", "run", "proc", "sys", "dev", "boot", "efi"] {
+        if head == r { return false }
+    }
+    true
+}
+
+/// Lexically resolve a relative symlink without escaping the root.
+pub fn safe_link(p: str, target: str) -> bool {
+    if target == "" || target.len > 4096 || text.starts_with(target, "/") || bad_text(target) {
+        return false
+    }
+    var depth = text.split(p, "/").len - 1
+    for c in text.split(target, "/") {
+        if c == "" || text.contains(c, "\\") { return false }
+        if c == ".." { depth -= 1 } else if c != "." { depth += 1 }
+        if depth < 0 { return false }
+    }
+    true
+}
+
+/// POSIX portable filename characters plus path separators. Nonportable names
+/// require UTF-8 pax path/linkpath even when they fit ustar's byte widths.
+pub fn portable(value: str) -> bool {
+    for c in value.bytes() {
+        if !(
+            c >= 48 as byte && c <= 57 as byte ||
+                c >= 65 as byte && c <= 90 as byte ||
+                c >= 97 as byte && c <= 122 as byte ||
+                c == 46 as byte ||
+                c == 95 as byte ||
+                c == 45 as byte ||
+                c == 47 as byte
+        ) {
+            return false
+        }
+    }
+    true
+}
+
+/// Whether a link target fits ustar's portable 100-byte linkname field.
+pub fn ustar_link(value: str) -> bool { value.len <= 100 && portable(value) }
+
+/// Whether an F5 path fits POSIX name[100] + prefix[155], in UTF-8 bytes.
+pub fn ustar_path(p: str) -> bool {
+    if !portable(p) { return false }
+    if p.len <= 100 { return true }
+    let b = p.bytes()
+    for i in 0..b.len {
+        if b[i] == 47 as byte && i <= 155 && p.len - i - 1 <= 100 { return true }
+    }
+    false
+}
+
+fn payload_entry_less(a: Entry, b: Entry) -> bool { version.lexical(a.path, b.path) < 0 }
+
+/// Sort bounded inventory metadata by UTF-8 path bytes.
+pub fn ordered(mut es: List[Entry]) { list.sort_by(mut es, payload_entry_less) }
+
+/// Binary lookup in a path-ordered inventory; -1 means absent.
+pub fn find(es: List[Entry], p: str) -> int {
+    var lo = 0
+    var hi = es.len
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2
+        let c = version.lexical(es[mid].path, p)
+        if c < 0 { lo = mid + 1 } else { hi = mid }
+    }
+    if lo < es.len && es[lo].path == p { return lo }
+    -1
+}
+
+/// Final inventory checks work for arbitrary wire ordering, without quadratic scans.
+pub fn validate(es: List[Entry]) -> str {
+    for i in 0..es.len {
+        let e = copy es[i]
+        if i > 0 && e.path == es[i - 1].path { return "duplicate-path" }
+        var parent = ""
+        let parts = text.split(e.path, "/")
+        for k in 0..parts.len - 1 {
+            if k > 0 { parent += "/" }
+            parent += parts[k]
+            let at = find(es, parent)
+            if at >= 0 && es[at].kind != "dir" { return "path-conflict" }
+        }
+        if e.kind == "hardlink" {
+            let at = find(es, e.target)
+            if at < 0 || es[at].kind != "file" { return "bad-hardlink" }
+            let f = copy es[at]
+            if f.mode != e.mode || f.owner != e.owner || f.group != e.group {
+                return "hardlink-metadata"
+            }
+        }
+    }
+    ""
+}
+
+struct Extensions { keys: List[str], values: List[str], error: str }
+
+fn extensions(b: List[byte]) -> Extensions {
+    var x = Extensions { keys: List[str](), values: List[str](), error: "" }
+    var at = 0
+    while at < b.len {
+        let start = at
+        while at < b.len && b[at] >= 48 as byte && b[at] <= 57 as byte { at += 1 }
+        if at == start || at >= b.len || b[at] != 32 as byte || b[start] == 48 as byte {
+            x.error = "pax-record"
+            return x
+        }
+        let n = number(slice(b, start, at - start), 10)
+        if n < 5 || n > b.len - start || n <= at - start + 2 {
+            x.error = "pax-record"
+            return x
+        }
+        let end = start + n
+        if b[end - 1] != 10 as byte { x.error = "pax-record"; return x }
+        at += 1
+        let key_start = at
+        while at < end - 1 && b[at] != 61 as byte { at += 1 }
+        if at >= end - 1 { x.error = "pax-record"; return x }
+        let key = str_from_utf8(slice(b, key_start, at - key_start)) else |_| {
+            x.error = "pax-text"
+            return x
+        }
+        at += 1
+        let value = str_from_utf8(slice(b, at, end - 1 - at)) else |_| {
+            x.error = "pax-text"
+            return x
+        }
+        if value == "" || bad_text(value) { x.error = "pax-text"; return x }
+        var known = false
+        for k in ["path", "linkpath", "size", "mtime", "atime", "ctime"] {
+            if key == k { known = true }
+        }
+        if !known { x.error = "pax-keyword"; return x }
+        for i in 0..x.keys.len { if key == x.keys[i] { x.error = "pax-duplicate"; return x } }
+        (mut x.keys).push(key)
+        (mut x.values).push(value)
+        at = end
+    }
+    if x.keys.len == 0 { x.error = "pax-unused" }
+    x
+}
+
+fn time_kind(v: str) -> int {
+    let b = v.bytes()
+    if b.len == 0 { return -1 }
+    var at = 0
+    var needed = false
+    let negative = b[0] == 45 as byte
+    if negative { at = 1 }
+    let start = at
+    while at < b.len && b[at] >= 48 as byte && b[at] <= 57 as byte { at += 1 }
+    if at == start { return -1 }
+    let whole = number(slice(b, start, at - start), 10)
+    if whole < 0 { return -1 }
+    if whole > 8589934591 || negative && whole > 0 { needed = true }
+    if at < b.len && b[at] == 46 as byte {
+        at += 1
+        let fraction = at
+        while at < b.len && b[at] >= 48 as byte && b[at] <= 57 as byte {
+            if b[at] != 48 as byte { needed = true }
+            at += 1
+        }
+        if at == fraction { return -1 }
+    }
+    if at != b.len { return -1 }
+    if needed { return 1 }
+    0
+}
+
+/// Read one declared tar window using the unchanged package profile.
+pub fn inspect(mut s: Stream) -> Inventory {
+    inspect_with_profile(mut s, package_profile())
+}
+
+/// Explicit trusted resource admission; F5/F6 structural rules are unchanged.
+pub fn inspect_with_profile(mut s: Stream, profile: Profile) -> Inventory {
+    if s.error != "" { return Inventory { entries: List[Entry](), error: s.error } }
+    s.error = profile_error(profile)
+    if s.error == "" && (s.length < 0 || s.pos < 0 || s.pos > s.length) {
+        s.error = "payload-length"
+    }
+    if s.error != "" { return Inventory { entries: List[Entry](), error: s.error } }
+    var es = List[Entry]()
+    var x = Extensions { keys: List[str](), values: List[str](), error: "" }
+    var pending = false
+    var ext_bytes = 0
+    var installed = 0
+    var h = List[byte]()
+    var buffer = List[byte]()
+    loop {
+        read_window(mut s, mut h, 512)
+        if s.error != "" { break }
+        if zero(h) {
+            if pending { s.error = "pax-orphan"; break }
+            read_window(mut s, mut h, 512)
+            if s.error != "" { break }
+            if !zero(h) { s.error = "end-blocks"; break }
+            // F6 has exactly two end blocks, never unbounded trailing data.
+            if s.pos != s.length { s.error = "trailing-data" }
+            break
+        }
+        var sum = 0
+        for i in 0..512 {
+            var v = h[i] as int
+            if i >= 148 && i < 156 { v = 32 }
+            if sum > 9223372036854775807 - v { s.error = "checksum-overflow"; break }
+            sum += v
+        }
+        if s.error != "" { break }
+        if octal(h, 148, 8) != sum { s.error = "checksum"; break }
+        if string(h, 257, 6) != "ustar" || string(h, 263, 2) != "00" {
+            s.error = "ustar-magic"
+            break
+        }
+        if !zero(slice(h, 500, 12)) { s.error = "header-padding"; break }
+        let mode = octal(h, 100, 8)
+        let uid = octal(h, 108, 8)
+        let gid = octal(h, 116, 8)
+        var length = octal(h, 124, 12)
+        let mtime = octal(h, 136, 12)
+        if mode < 0 || uid < 0 || gid < 0 || length < 0 || mtime < 0 {
+            s.error = "header-number"
+            break
+        }
+        if mode > 511 { s.error = "set-id-mode"; break }
+        if uid > 4294967295 || gid > 4294967295 { s.error = "owner-range"; break }
+        if octal(h, 329, 8) != 0 || octal(h, 337, 8) != 0 { s.error = "device-metadata"; break }
+        if bad_text(string(h, 265, 32)) || bad_text(string(h, 297, 32)) {
+            s.error = "header-text"
+            break
+        }
+        var ascii = true
+        for c in h { if c > 127 as byte { ascii = false } }
+        if !ascii { s.error = "header-text"; break }
+        var path = string(h, 0, 100)
+        let prefix = string(h, 345, 155)
+        if prefix != "" { path = "{prefix}/{path}" }
+        var target = string(h, 157, 100)
+        if bad_text(path) || bad_text(target) { s.error = "header-text"; break }
+        let flag = h[156] as int
+        if flag == 103 { s.error = "pax-global"; break }
+        if flag == 120 {
+            if pending { s.error = "pax-multiple"; break }
+            if length > 1048576 || length > profile.max_extension_bytes - ext_bytes {
+                s.error = "extension-limit"
+                break
+            }
+            ext_bytes += length
+            read_window(mut s, mut buffer, length)
+            if s.error != "" { break }
+            read_window(mut s, mut h, (512 - length % 512) % 512)
+            if s.error != "" { break }
+            if !zero(h) { s.error = "nonzero-padding"; break }
+            x = extensions(buffer)
+            if x.error != "" { s.error = x.error; break }
+            pending = true
+            continue
+        }
+        var kind = ""
+        if flag == 48 || flag == 0 {
+            kind = "file"
+        } else if flag == 53 {
+            kind = "dir"
+        } else if flag == 50 {
+            kind = "symlink"
+        } else if flag == 49 {
+            kind = "hardlink"
+        } else {
+            s.error = "payload-type"
+            break
+        }
+        var had_path = false
+        var had_link = false
+        if pending {
+            for i in 0..x.keys.len {
+                let k = x.keys[i]
+                let v = x.values[i]
+                if k == "path" {
+                    if ustar_path(v) { s.error = "pax-unused"; break }
+                    path = v
+                    had_path = true
+                } else if k == "linkpath" {
+                    if ustar_link(v) || !(kind == "symlink" || kind == "hardlink") {
+                        s.error = "pax-unused"
+                        break
+                    }
+                    target = v
+                    had_link = true
+                } else if k == "size" {
+                    let n = number(v.bytes(), 10)
+                    if n < 0 { s.error = "pax-number"; break }
+                    if n <= 8589934591 || kind != "file" { s.error = "pax-unused"; break }
+                    length = n
+                } else {
+                    let time = time_kind(v)
+                    if time < 0 { s.error = "pax-time"; break }
+                    // ustar has no atime/ctime fields; any valid value needs pax.
+                    if k == "mtime" && time == 0 { s.error = "pax-unused"; break }
+                }
+            }
+            pending = false
+            if s.error != "" { break }
+        }
+        if !allowed_path(path) { s.error = "bad-path"; break }
+        if !had_path && !ustar_path(path) { s.error = "pax-required"; break }
+        if kind == "symlink" && !safe_link(path, target) { s.error = "bad-symlink"; break }
+        if kind == "hardlink" && !allowed_path(target) { s.error = "bad-hardlink"; break }
+        if (kind == "symlink" || kind == "hardlink") && !had_link && !ustar_link(target) {
+            s.error = "pax-required"
+            break
+        }
+        if (kind == "file" || kind == "dir") && target != "" { s.error = "unused-link"; break }
+        if kind != "file" && length != 0 { s.error = "type-size"; break }
+        if es.len >= profile.max_entries { s.error = "entry-limit"; break }
+        if length > profile.max_data_bytes - installed { s.error = "installed-limit"; break }
+        installed += length
+        if length > s.length - s.pos { s.error = "payload-length"; break }
+        let offset = s.pos
+        var st = sha2.new256()
+        var remaining = length
+        while remaining > 0 {
+            var n = remaining
+            if n > profile.chunk_bytes { n = profile.chunk_bytes }
+            let got = read_into(s.fd, mut buffer, n) else |_| {
+                s.error = "payload-truncated"
+                break
+            }
+            if got == 0 { s.error = "payload-truncated"; break }
+            s.pos += got
+            sha2.update256(mut st, buffer)
+            remaining -= got
+        }
+        if s.error != "" { break }
+        read_window(mut s, mut h, (512 - length % 512) % 512)
+        if s.error != "" { break }
+        if !zero(h) { s.error = "nonzero-padding"; break }
+        var hash = ""
+        if kind == "file" { hash = sha2.to_hex(sha2.final256(take st)) }
+        (mut es).push(Entry {
+            path,
+            kind,
+            mode,
+            owner: uid,
+            group: gid,
+            length,
+            hash,
+            target,
+            offset,
+        })
+    }
+    if s.error == "" { ordered(mut es); s.error = validate(es) }
+    Inventory { entries: es, error: s.error }
+}
+
+/// Whole-blob authentication primitive: held fd, bounded chunks, no parsing.
+pub fn digest(fd: int, length: int) -> Digest {
+    var s = Stream { fd, pos: 0, length, error: "" }
+    var st = sha2.new256()
+    var buffer = List[byte]()
+    while s.pos < length {
+        var n = length - s.pos
+        if n > 65536 { n = 65536 }
+        let got = read_into(fd, mut buffer, n) else |_| {
+            return Digest { hash: "", length: s.pos, error: "payload-truncated" }
+        }
+        if got == 0 { return Digest { hash: "", length: s.pos, error: "payload-truncated" } }
+        s.pos += got
+        sha2.update256(mut st, buffer)
+    }
+    Digest { hash: sha2.to_hex(sha2.final256(take st)), length, error: "" }
+}

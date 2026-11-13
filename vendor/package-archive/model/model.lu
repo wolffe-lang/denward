@@ -1,0 +1,33 @@
+//! Data types only. No search/checking predicates live here.
+
+/// Required, advisory, conflicting or replacement capability constraint.
+pub struct Need { name: str, op: str, version: str, arch: str, slot: str }
+
+/// An exact versioned advertised capability.
+pub struct Offer { name: str, version: str }
+
+/// Validated immutable package metadata needed for resolution.
+pub struct Package {
+    name: str,
+    version: str,
+    arch: str,
+    slot: str,
+    requires: List[Need],
+    optional: List[Need],
+    provides: List[Offer],
+    conflicts: List[Need],
+    replaces: List[Need],
+}
+
+/// One bounded immutable universe, including prior installed identities and holds.
+pub struct Snapshot {
+    packages: List[Package],
+    installed: List[str],
+    holds: List[str],
+    arch: str,
+    slot: str,
+    budget: int,
+}
+
+/// Canonical unambiguous package identity.
+pub fn id(p: Package) -> str { "{p.name}@{p.arch}/{p.slot}={p.version}" }
