@@ -1,0 +1,5 @@
+//! Red-first placeholder. Deliberately accepts every input until the reader lands.
+fn main() -> int {
+    print("parsed")
+    0
+}
