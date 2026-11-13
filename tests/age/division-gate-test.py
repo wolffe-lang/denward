@@ -18,7 +18,9 @@ def main():
     p.add_argument('--workspace', type=Path, required=True)
     p.add_argument('--require-wired', action='store_true')
     a = p.parse_args()
-    a.workspace.mkdir(parents=True, exist_ok=False)
+    # Default and release gate invocations share a record workspace. Every
+    # synthetic input below is replaced before use, so reuse is deterministic.
+    a.workspace.mkdir(parents=True, exist_ok=True)
     assembly = a.workspace / 'fixture.asm'
     baseline = '''00000000 <_Wstd.x.crypto.curve25519.ladder$abc>:
    0: f6 f6 div %sil
