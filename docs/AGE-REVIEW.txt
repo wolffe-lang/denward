@@ -47,7 +47,10 @@ Required reading, in order
    tests/age/crypto/main.lu, tests/age/driver/main.lu and their wolf.pkg
    files. The driver is not installed. Read tests/age/inventory.json,
    tests/age/check.py, tests/age/hostile.py, tests/age/interop.py,
-   tests/age/lifetimes.py and tools/fetch-age-vectors.py. Vector bytes are
+   tests/age/lifetimes.py, tests/age/parser/main.lu and its wolf.pkg,
+   tests/age/seams.py, tests/age/seams/fake_fs.lu,
+   tests/age/boundaries.py, tests/age/measure-child.py, tests/age/fuzz.py,
+   tests/age/mac-interop.py and tools/fetch-age-vectors.py. Vector bytes are
    pinned data only from C2SP/CCTV b88c4b206254ac543df240097e0f1fcc6a664821.
    Unsupported profiles are not passed tests. Compare full plaintext and
    authenticated-prefix hashes, including a verified full final chunk that
@@ -92,9 +95,11 @@ remain the future controller's responsibility.
 
 Limits are application admission, not universal age-format maxima. A 256 MiB
 process memory measurement must include runtime overhead, allocator behavior
-and inherited parent RSS. The Linux lifetime script uses a stronger 256 MiB
-address-space bound and records its small parent's inherited RSS floor; the
-cumulative child peak is an upper bound, not an intrinsic exact child peak.
+and parent/spawn context. The Linux witnesses use a stronger 256 MiB
+address-space bound and report the small parent's self peak as a reference,
+not a guaranteed lower bound on the child: the development record's measured
+child peaks were lower. Cumulative child rusage is an upper-bound observation,
+not an intrinsic exact peak; do not subtract the parent reference from it.
 
 The prerequisite audit observed secret-derived division in default-build
 x86 X25519 and none in the inspected release counterparts. Retake/read the
@@ -107,10 +112,19 @@ PAX creation still refuses entropy_unqualified before drawing; actual PAX
 interoperability remains an open later requirement. Deterministic decrypt has
 no entropy prerequisite. Provider failure after admission still traps under
 the pinned OS-random contract; it is not caught or renamed unavailable, and
-there is no fallback. Qualification still owes the creation/decryption test
-seam, provider/interruption/partial/zero-progress injections, cap boundaries,
-parser mutation coverage/seed/minimized failures, exact-head full records,
-a named authentication plant and the separate independent reading.
+there is no fallback. Test-only source copies substitute the descriptor
+import and/or the pinned std random module's platform/provider seam, record
+provenance hashes, and retain the production codec body. Models exercise
+partial progress, zero progress, terminal I/O and interrupted-operation I/O;
+they do not measure actual kernel EINTR or signal delivery. The provider trap
+model checks no stdout ciphertext; the PAX guard copy checks no source/sink
+operation before refusal and successful deterministic published-file decrypt.
+No seam or deterministic entropy is exposed by a production entry point.
+Qualification still requires their final exact-head records, maximum-header
+parser/HMAC memory (not inferred from 64 KiB chunk RSS), bounded mutation
+coverage/seeds/minimized failures, the authentication plant and the separate
+independent reading. Actual controller interruption cleanup is still future
+integration work, not something these interface models implement.
 
 No armor, scrypt derivation, SSH/plugin/PQ/hybrid recipients, custom cipher,
 custom labels/AAD, altered tag widths, random chunk nonces, extra wrapper,
