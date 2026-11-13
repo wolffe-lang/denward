@@ -1,22 +1,24 @@
 # Archive stream adapter
 
-The shared restricted-pax component needs a small upstream extension before backup reuse. Its existing package packer owns a directory/template/output-file workflow and is not a ready encryption-stream producer. Do not route that packer through a plaintext archive spool. Extend the shared component, retain its package defaults and tests, then import an exact reviewed public pin. No upstream implementation or private source identity is copied here yet.
+The public restricted-pax core is pinned at paxage revision `2c69152ba9aa760ec5104b65a23ef961bfa83368`, including its borrowed-handle writer and explicit profiles. Exact source/licence provenance and separate package glue are under `vendor/package-archive`. The internal [safe-object adapter](SAFE-OBJECT-FRAMING.md) uses this sink writer and reader without the package directory/template/output-file workflow or a plaintext spool. Its successful claim is physical framing/inventory validation only; complete BR1 backup/verify/store integration remains unfinished.
 
-## Proposed interface
+## Pinned core interface
 
 Start with a descriptor-backed bounded sink, which can be a pipe into the encryption stage; this needs no unqualified closure/trait API. The controller owns opening, closing, lifetime, cancellation and publication. The library owns only archive framing and checked accounting.
 
 ```text
-Limits { max_entries, max_data_bytes, max_extension_bytes, max_chunk_bytes }
-writer_start(out_fd, limits) -> Writer | named_error
-writer_begin(mut writer, validated_header) -> ok | named_error
-writer_data(mut writer, bytes) -> ok | named_error
-writer_end(mut writer) -> entry_result | named_error
-writer_finish(mut writer) -> framing_complete | named_error
-inspect_with_limits(mut declared_stream, limits) -> Inventory | named_error
+Profile { max_entries, max_data_bytes, max_extension_bytes, chunk_bytes }
+writer_start(out_fd, profile) -> Writer
+writer_error(writer) -> first_named_error_or_empty
+writer_begin(mut writer, validated_header) -> named_error_or_empty
+writer_data(mut writer, bytes) -> named_error_or_empty
+writer_end(mut writer) -> named_error_or_empty
+writer_finish(mut writer) -> named_error_or_empty
+writer_abort(mut writer) -> named_error
+inspect_with_profile(mut declared_stream, profile) -> Inventory
 ```
 
-The header describes an archive member, not a source filesystem path. Begin checks canonical ordering, supported type/numeric/path/link policy, declared member length and aggregate limits before output. Data accepts bounded chunks and handles underlying short writes or fails; zero progress is an error. End checks exact member length and writes zero padding. Finish writes exactly two zero end blocks; it does not fsync, close, rename, publish a receipt or declare a backup complete. A failed writer cannot be resumed as a new archive. Existing inspect can delegate to inspect-with-limits using unchanged package defaults.
+The header describes an archive member, not a source filesystem path. Begin checks canonical ordering, supported type/numeric/path/link policy, declared member length and aggregate limits before output. Data accepts bounded chunks and handles underlying short writes or fails; zero progress is an error. End checks exact member length and writes zero padding. Finish writes exactly two zero end blocks; it does not fsync, close, rename, publish a receipt or declare a backup complete. A failed writer cannot be resumed as a new archive. Existing inspect delegates to inspect-with-profile using unchanged package defaults.
 
 The package packer retains its template/node limits, reserved-root policy, canonical owners/times, output naming and existing error behavior; only its framing helper calls are factored through the writer after byte-for-byte regression proof. Package defaults remain 100,000 entries, 16 GiB aggregate data and 1 MiB extensions. Backup requests an explicit separately qualified profile, uses only safe physical control/object members, and keeps logical home/symlink/sparse/account policy outside package extraction. Do not widen package defaults to enable a backup.
 
@@ -24,7 +26,9 @@ For backup, the caller precomputes immutable-source logical metadata/digests in 
 
 The release entry bound is the measured combined inventory footprint plus runtime/encryption/reader overhead inside 256 MiB, not the former million-entry proposal. Before enabling data operations, measure bytes per entry across representative and worst-case names/maps, publish a safe numerical ceiling and make inspect report/refuse above it. Until then the inventory budget is unqualified and no successful backup is advertised.
 
-## Rows before the upstream change
+## Qualification boundaries
+
+The pinned core's package regression and framing rows precede this integration. The safe-object adapter adds its own independent-byte, name/type/normalization, digest, borrowed-handle and failure rows. The remaining whole-backup pipeline obligations are listed separately below; their presence is not a claim that encryption or large-stream qualification has run.
 
 - Existing package output is byte-identical before/after factoring; all package malformed-input and boundary gates remain unchanged.
 - Controller-owned fd remains open after success/failure; the writer never creates, closes, syncs or publishes files on its own.
@@ -39,4 +43,4 @@ The release entry bound is the measured combined inventory footprint plus runtim
 
 Allow 6–10 focused lane-days for the first backup/verify and primary-store integration phase: 2–3 for the upstream sink/profile extension and unchanged-default regression, 3–5 for backup inventory/archive/verify integration, and 1–2 for combined stream/bounds/large-input qualification. The Mac-first SSH endpoint develops alongside that work rather than waiting for restore. Encryption qualification/review and the measured in-memory entry ceiling remain independent release prerequisites. Host queues and upstream defects are additional time.
 
-The upstream change waits for publication confirmation, uses its own archive-only branch/PR and does not modify another active branch. This design does not authorize that change before confirmation.
+The upstream archive-only change is complete and its exact pin is imported. No active encryption branch is incorporated by this checkpoint. No CLI success, inventory capacity, encrypted primary store or whole-backup qualification is inferred from the framing API.
