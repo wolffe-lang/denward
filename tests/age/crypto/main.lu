@@ -11,7 +11,7 @@ fn main() -> !int {
     let rb = curve25519.x25519_base(b)
     let created = age.create_header([ra, rb])?
     let parsed = age.parse_header(created.raw)?
-    let fa = age.open_header(parsed, [a])?
+    let fa = age.open_header(parsed, [copy a])?
     let fb = age.open_header(parsed, [b])?
     assert(bytes.is_equal_fixed_work(fa, created.file_key))
     assert(bytes.is_equal_fixed_work(fb, created.file_key))
@@ -20,21 +20,21 @@ fn main() -> !int {
         var bad = copy parsed
         bad.tag[i] = ((bad.tag[i] as int + 1) % 256) as byte
         var refused = false
-        let out = age.open_header(bad, [a]) else |hmac| { refused = true; List[byte]() }
+        let out = age.open_header(bad, [copy a]) else |e| { refused = match e { hmac => true, _ => false }; List[byte]() }
         assert(refused && out.len == 0)
     }
     print("PASS header-mac-positions")
     var wrong = List[byte]()
     for _ in 0..32 { (mut wrong).push(68 as byte) }
     var refused = false
-    let ignored = age.open_header(parsed, [wrong]) else |no_match| { refused = true; List[byte]() }
+    let ignored = age.open_header(parsed, [wrong]) else |e| { refused = match e { no_match => true, _ => false }; List[byte]() }
     assert(refused && ignored.len == 0)
     var zero = List[byte]()
     for _ in 0..32 { (mut zero).push(0 as byte) }
     var poisoned = copy parsed
     (mut poisoned.stanzas).push(age.Stanza { share: zero, body: parsed.stanzas[0].body })
     refused = false
-    let blocked = age.open_header(poisoned, [a]) else |header| { refused = true; List[byte]() }
+    let blocked = age.open_header(poisoned, [copy a]) else |e| { refused = match e { header => true, _ => false }; List[byte]() }
     assert(refused && blocked.len == 0)
     print("PASS wrap-or-recovery")
     var counter = List[byte]()
