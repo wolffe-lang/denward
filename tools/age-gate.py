@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def step(name, command, env, timeout=300):
     print('START ' + name, flush=True)
+    if len(command) > 1 and command[1] == 'build':
+        subprocess.run([sys.executable, '-I', str(ROOT / 'tools/mac-resource.py')], cwd=ROOT, env=env, check=True)
     result = subprocess.run(command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
     for line in result.stdout.decode('utf-8', 'replace').splitlines():
         print(line if line.startswith('FAIL ') else '  ' + line, flush=True)

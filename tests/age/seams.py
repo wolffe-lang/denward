@@ -216,6 +216,7 @@ def main():
         command = [state['wolf'], 'build', '--deny-warnings', str(stage / 'main.lu'), '-o', str(binary)]
         if a.release:
             command.append('--release')
+        subprocess.run([sys.executable, '-I', str(ROOT / 'tools/mac-resource.py')], env=env, check=True)
         compiled = subprocess.run(command, env=env, cwd=stage, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
         if compiled.returncode:
             for line in compiled.stdout.decode('utf-8', 'replace').splitlines():

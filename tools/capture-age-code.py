@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
@@ -23,6 +24,7 @@ for mode in ['default', 'release']:
     command = [state['wolf'], 'build', str(ROOT / 'tests/age/driver/main.lu'), '--emit=obj', '-o', str(out)]
     if mode == 'release':
         command.append('--release')
+    subprocess.run([sys.executable, '-I', str(ROOT / 'tools/mac-resource.py')], cwd=ROOT, env=env, check=True)
     subprocess.run(command, cwd=ROOT, env=env, check=True, timeout=180)
     objects = sorted(stage.glob('*.o'))
     if not objects:

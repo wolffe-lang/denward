@@ -55,7 +55,8 @@ Required reading, in order
    Unsupported profiles are not passed tests. Compare full plaintext and
    authenticated-prefix hashes, including a verified full final chunk that
    reaches the internal sink before appended data makes the operation fail.
-7. tools/age-gate.py, tools/capture-age-code.py, tools/gate.py,
+7. tools/age-gate.py, tools/capture-age-code.py, tools/mac-resource.py,
+   tools/gate.py,
    tools/age-witness/linux.manifest, tools/age-witness/admission.manifest,
    tools/age-witness/engine.sh, tools/age-witness/step.sh,
    tools/age-witness/inner.sh, tools/age-witness/preflight.py,

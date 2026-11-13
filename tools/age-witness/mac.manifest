@@ -3,6 +3,7 @@ rig mac-step.sh committed=../..:HEAD:tools/age-witness/mac-step.sh
 rig mac-step.py committed=../..:HEAD:tools/age-witness/mac-step.py
 rig oracle.sh committed=../..:HEAD:tools/age-witness/oracle.sh
 rig ../age-gate.py committed=../..:HEAD:tools/age-gate.py
+rig ../mac-resource.py committed=../..:HEAD:tools/mac-resource.py
 rig ../capture-age-code.py committed=../..:HEAD:tools/capture-age-code.py
 rig ../../tests/age/check.py committed=../..:HEAD:tests/age/check.py
 rig ../../tests/age/hostile.py committed=../..:HEAD:tests/age/hostile.py

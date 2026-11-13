@@ -22,6 +22,8 @@ ENV.update(WOLF_STD=STATE['std'], LUPIN_STD=STATE['std'], TMPDIR=str(OUT / 'tmp'
 
 
 def run(command, **kwargs):
+    if len(command) > 1 and command[1] == 'build':
+        subprocess.run([sys.executable, '-I', str(ROOT / 'tools/mac-resource.py')], cwd=ROOT, env=ENV, check=True)
     subprocess.run([str(v) for v in command], cwd=ROOT, env=ENV, check=True, **kwargs)
 
 

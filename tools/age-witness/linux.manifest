@@ -6,6 +6,7 @@ rig step.sh committed=../..:HEAD:tools/age-witness/step.sh
 rig inner.sh committed=../..:HEAD:tools/age-witness/inner.sh
 rig preflight.py committed=../..:HEAD:tools/age-witness/preflight.py
 rig ../age-gate.py committed=../..:HEAD:tools/age-gate.py
+rig ../mac-resource.py committed=../..:HEAD:tools/mac-resource.py
 rig ../gate.py committed=../..:HEAD:tools/gate.py
 rig ../check-contracts.py committed=../..:HEAD:tools/check-contracts.py
 rig ../link-static committed=../..:HEAD:tools/link-static
