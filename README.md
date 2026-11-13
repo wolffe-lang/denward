@@ -2,7 +2,7 @@
 
 A backup and restore tool in wolf for carrying personal data and system identity across a fresh PAX installation.
 
-**Status: refusal-only scaffold.** No backup, verification, receiver, encryption or restore operation is implemented. `version` and help work; every data operation refuses before opening a source, destination or network connection. Do not use this version to protect data or authorize a reinstall.
+**Status: refusal-only command.** No backup, verification, receiver or restore operation is enabled. `version` and help work; every data operation refuses before opening a source, destination or network connection. An internal age v1 X25519 codec is reachable only through tests and a non-installed test driver; it is not independently reviewed or qualified for real data. **Do not use it for a real backup before independent review**, and do not use this version to protect data or authorize a reinstall.
 
 The primary store is an SSH receiver on macOS arm64, reached through macOS's OpenSSH server, with an ordinary destination directory on an encrypted volume. The same endpoint will run on Linux. A separate physical disk holds the second verified copy. A successful SSH transfer alone will not establish a complete backup.
 
@@ -21,7 +21,7 @@ See [the implementation plan](docs/IMPLEMENTATION.md), [CLI](spec/cli-v1.md), [b
 
 ## Development
 
-Supported initial hosts are x86-64 Linux and macOS arm64. Builds use the exact wolf, lupin and standard-library identities in `wolf-toolchain.toml`. No global toolchain installation is needed.
+Supported initial hosts are x86-64 Linux and macOS arm64. Builds use the exact wolf, lupin and standard-library identities in `wolf-toolchain.toml` as one review set. Shipped denward binaries are release builds; the test-only codec runs rows in both default and release builds. Neither build has a timing certification. No global toolchain installation is needed. The codec's required independent reading and remaining claim limits are in [the review packet](docs/AGE-REVIEW.txt).
 
 ```sh
 python3 tools/fetch-toolchain.py
