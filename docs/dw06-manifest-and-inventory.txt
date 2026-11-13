@@ -4,13 +4,14 @@ Design checkpoint, 2026-11-13
 
 Status and authority
 
-This is a proposed implementation design, not a reader, a source inventory,
-a measured admission profile or permission to make a backup. All data verbs
-remain refusal-only. The codec, physical archive framing, dependency pins and
-versioned specifications are unchanged. No implementation or native test has
-run for this design. The prerequisite decision near the end blocks the full
-walker, so implementation stops at this checkpoint rather than substituting
-an incomplete filesystem scan.
+This design now accompanies an internal strict manifest reader and an
+always-refusing source-inventory boundary. All command data verbs remain
+refusal-only. Codec, physical archive framing and dependency pins are unchanged.
+The accepted grammar details are explicit in spec/manifest-v1.md. The host
+filesystem prerequisite belongs in the owning runtime/standard-library work;
+this checkpoint does not wait for it or build a path-only substitute walker.
+Parser admission measurements are separate from production inventory capacity,
+which remains unqualified. See the lane note for exact qualification evidence.
 
 The normative inputs are spec/backup-v1.md, spec/manifest-v1.md,
 spec/stream-v1.md and spec/restore-state-v1.md. Read them alongside
@@ -36,9 +37,8 @@ Its record language is:
 The three control records are in archive-path byte order, exactly once each.
 Objects are in id byte order. Files are in decoded path byte order; extents
 immediately follow their owning file. There is exactly one header and end.
-The separate selection-then-exclusion phases above are a proposed
-clarification of the specification's currently combined selection/exclusion
-phase, not a format change made by this note. See the grammar decision.
+The separate selection-then-exclusion phases above are now explicit in the
+schema clarification. They replace the formerly combined phase description.
 
 Each phase has a state machine: record type is admitted before constructing
 its typed value. A late control/object, extent without its current sparse
@@ -270,12 +270,13 @@ Any failure aborts the whole operation without complete publication.
 
 5. Measurement, not a capacity guess
 
-No representation is implemented or measured at this checkpoint. Therefore
-fixed overhead, bytes per entry, safe entry count and safe extent count are
-NOT MEASURED on both supported platforms. Production admission stays
-inventory_budget_unqualified. This note assigns no nonzero release ceiling.
-The physical archive's earlier profile measurements cannot qualify a combined
-logical/source inventory.
+Only the manifest-reader representation is implemented and measured in this
+checkpoint. There is no source walker or combined production inventory
+measurement. Therefore safe production entry and extent counts remain NOT
+MEASURED on both supported platforms. Production admission stays
+inventory_budget_unqualified; this note assigns no nonzero release ceiling.
+Parser-only test limits and measured rows are in the lane note. The earlier
+physical archive profile cannot qualify a combined logical/source inventory.
 
 Proposed representation is typed file/object/extent vectors, a bounded decoded
 string arena, explicit references/identity tables, and an index sort rather
@@ -395,9 +396,13 @@ their ABI/lifetime/metadata/backend contracts; or (c) narrow this checkpoint to
 a manifest-only reader plus an always-refusing host-inventory boundary.
 Recommend (a), with (c) only as an explicitly reduced follow-on deliverable.
 Do not implement a path-only whole-directory walker and call it qualified.
-The current lane cannot choose a new pin or commit owning-project changes as
-an incidental inventory implementation. This decision blocks the full walker,
-and hence its combined representation measurements, before native builds.
+The accepted scope is (a), without waiting for that prerequisite, plus (c):
+this checkpoint builds only the manifest reader and a no-I/O inventory boundary.
+The boundary's explicit internal name is inventory_host_unqualified; it does
+not replace or widen CLI refusal taxonomy. Production inventory admission also
+remains inventory_budget_unqualified. No native ABI workaround or new pin is
+introduced. The missing walker prevents combined inventory qualification, not
+the separately bounded parser tests.
 
 Minimum prerequisite contract:
 
@@ -417,9 +422,10 @@ Minimum prerequisite contract:
 
 8. Grammar clarification decision
 
-The published schema has no released parser fixture (tests/fixtures/v1 contains
-only a placeholder). Its prose still leaves interoperability choices. Resolve
-these together before freezing reader vectors; this note does not edit spec/.
+The following clarification was accepted and committed to spec/manifest-v1.md
+before frozen parser vectors. It is independently reversible as a schema-only
+commit, not an implicit interpretation hidden in the parser. The list below
+records the design choices; the versioned specification is authoritative.
 
 Recommend an explicit schema clarification with the following choices:
 
@@ -452,8 +458,8 @@ Recommend an explicit schema clarification with the following choices:
 Alternative: retain the current ambiguous prose and have each implementation
 choose. Reject that alternative: shared fixtures can conceal a shared mistaken
 interpretation. A compatibility revision after shipping must retain old bytes
-and explicitly handle them, not regenerate them. Changing spec/ would be a
-separate cross-cutting change, not silently bundled into this design checkpoint.
+and explicitly handle them, not regenerate them. The schema diff is a separate cross-cutting commit, not silently bundled into
+a parser implementation change.
 
 9. Implementation and qualification after the decisions
 
@@ -497,9 +503,9 @@ and macOS must both be green at the implementation head before merge. Do not
 rerun an unexplained red to green. Independent complete restored-tree and
 A-to-B/controller gates remain future work, not parser/walker evidence.
 
-Current checkpoint has no hostile native red, mutation run, plant, memory
-measurement, Linux/macOS implementation record or hosted implementation result.
-It intentionally stops at the prerequisite and grammar decisions. README was
-read against this scope; its unimplemented logical parser/inventory statements
-remain current. The required next action is the filesystem-prerequisite scope
-choice, not authorization to use this tool on real data.
+The lane note records the implemented parser's hostile native reds, mutations,
+plant and bounded memory evidence. No host inventory, restore, or multi-pass
+verification scheduler is built in this checkpoint. The scheduler above is a
+stated follow-on with explicit work admission, not a current verification claim.
+README must keep the internal/parser-only distinction; this tool still must
+not be used for real data or to authorize a reinstall.

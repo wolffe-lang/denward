@@ -100,6 +100,7 @@ def main():
         print('PASS static-linux-command', flush=True)
     step('cli-unit', [str(out / 'cli-unit')], env)
     step('cli-e2e', [sys.executable, '-I', str(ROOT / 'tests/cli/check.py'), '--program', str(out / 'denward'), '--workspace', str(work)], env)
+    step('manifest-default-and-release', [sys.executable, '-I', str(ROOT / 'tools/manifest-gate.py'), '--workspace', str(work / 'manifest')], env)
     step('age-vector-data', [sys.executable, '-I', str(ROOT / 'tools/fetch-age-vectors.py')], env)
     step('age-default-and-release', [sys.executable, '-I', str(ROOT / 'tools/age-gate.py'), '--workspace', str(work / 'age'), '--data', str(ROOT / '.work/age-vectors')], env)
     if actual == 'linux-x86_64':
