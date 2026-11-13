@@ -149,9 +149,9 @@ pub error CreationErrors = {key, budget, entropy_unqualified}
 /// no recipient match, or full header-MAC failure. No input in a row value.
 pub error RecoveryErrors = {key, header, budget, unsupported, no_match, hmac}
 
-/// New-session internal state, not a published file or backup receipt.
+/// Private per-encrypt creation state; never returned by a production API.
 /// File keys are confidential ordinary region-owned bytes, not erased storage.
-pub struct Created {
+struct Created {
     raw: List[byte],
     file_key: List[byte],
     payload_nonce: List[byte],
@@ -180,8 +180,9 @@ fn header_tag(file_key: List[byte], transcript: List[byte]) -> List[byte] {
 
 /// Create an ordinary age X25519 header using only the guarded OS source.
 /// All draws and wraps complete before returning any ciphertext to a caller.
-/// There is no deterministic-entropy parameter or production fallback.
-pub fn create_header(recipients: List[List[byte]]) -> Created ! CreationErrors {
+/// Private to one encrypt call so no caller can retain/reuse raw creation
+/// key/nonce state. There is no deterministic-entropy parameter or fallback.
+fn create_header(recipients: List[List[byte]]) -> Created ! CreationErrors {
     if recipients.len < 1 { return key }
     if recipients.len > 64 { return budget }
     for r in recipients { if r.len != 32 { return key } }
