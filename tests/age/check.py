@@ -39,13 +39,15 @@ def main():
     args.workspace.mkdir(parents=True, exist_ok=True, mode=0o700)
     key_path = args.workspace / 'published-test-identity'
     passed = 0
+    armor_refusals = 0
     failures = []
     for case in inventory['cases']:
         name = case['name']
-        if case['classification'] == 'unsupported':
+        armor = case['classification'] == 'unsupported' and name.startswith('armor_')
+        if case['classification'] == 'unsupported' and not armor:
             print('UNSUPPORTED published/' + name + ' reason=unimplemented-profile', flush=True)
             continue
-        if args.small and not case['mac']:
+        if args.small and not (case['mac'] or (armor and case['decoded_bytes'] <= 4 * 1024 * 1024)):
             print('NOT-RUN published/' + name + ' reason=large-linux-row', flush=True)
             continue
         fields, ciphertext = vector(args.data / name, case['sha256'])
@@ -53,6 +55,10 @@ def main():
         # hybrid_x25519_arg rejection vector also includes an irrelevant PQ
         # identity; its malformed supported stanza must still reject.
         identities = [key for key in fields.get('identity', []) if key.startswith('AGE-SECRET-KEY-1')]
+        if armor:
+            # A valid public fixture identity makes this a format refusal,
+            # not an empty/unsupported key-file rejection.
+            identities = ['AGE-SECRET-KEY-1GFPYYSJZGFPYYSJZGFPYYSJZGFPYYSJZGFPYYSJZGFPYYSJZGFPQ4EGAEX']
         if key_path.exists():
             key_path.unlink()
         fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -63,6 +69,14 @@ def main():
         finally:
             key_path.unlink()
         output_hash = hashlib.sha256(result.stdout).hexdigest()
+        if armor:
+            ok = result.returncode == 1 and not result.stdout and any(tag in result.stderr for tag in [b'header', b'truncated', b'unsupported'])
+            print(('PASS ' if ok else 'FAIL ') + 'unsupported-armor-refusal/' + name, flush=True)
+            if ok:
+                armor_refusals += 1
+            else:
+                failures.append(name)
+            continue
         ok = result.returncode == 0 if case['classification'] == 'valid' else result.returncode == 1
         if case['payload_sha256'] is not None:
             ok = ok and output_hash == case['payload_sha256']
@@ -86,7 +100,7 @@ def main():
             # Do not display stderr/plaintext/key input, including on a trap.
             print('FAIL published/' + name + ' exit=' + str(result.returncode) + ' prefix_sha256=' + output_hash, flush=True)
             failures.append(name)
-    print('Published selected passes=' + str(passed) + ' failures=' + str(len(failures)), flush=True)
+    print('Published selected passes=' + str(passed) + ' unsupported-armor-refusals=' + str(armor_refusals) + ' failures=' + str(len(failures)), flush=True)
     return 1 if failures else 0
 
 
