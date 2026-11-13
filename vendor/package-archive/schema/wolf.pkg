@@ -1,0 +1,11 @@
+pkg {
+    name: "wolffe-lang/paxage-archive-schema",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [],
+    deps: {
+        literal: { path: "../literal" },
+        model: { path: "../model" },
+        version: { path: "../version" },
+    },
+}

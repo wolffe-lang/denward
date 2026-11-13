@@ -1,0 +1,132 @@
+//! Version v1. Original implementation from docs/VERSION.md; no foreign oracle.
+
+use std.str as text
+
+/// UTF-8 byte slice, empty on invalid boundaries.
+pub fn part(s: str, a: int, b: int) -> str {
+    text.get(s, a, b) else |_| { "" }
+}
+
+fn digits(s: str) -> bool {
+    if s.len == 0 { return false }
+    for c in s.bytes() {
+        if c < 48 as byte || c > 57 as byte { return false }
+    }
+    true
+}
+
+/// Validate V2 syntax and encoded-size bound.
+pub fn valid(s: str) -> bool {
+    if s.len == 0 || s.len > 4096 { return false }
+    let hy = text.split(s, "-")
+    if hy.len != 2 || !digits(hy[1]) { return false }
+    var positive = false
+    for c in hy[1].bytes() { if c != 48 as byte { positive = true } }
+    if !positive { return false }
+    let ep = text.split(hy[0], ":")
+    if ep.len > 2 { return false }
+    var up = ep[0]
+    if ep.len == 2 {
+        if !digits(ep[0]) { return false }
+        up = ep[1]
+    }
+    if up.len == 0 { return false }
+    for c in up.bytes() {
+        if !(
+            c >= 48 as byte && c <= 57 as byte ||
+                c >= 65 as byte && c <= 90 as byte ||
+                c >= 97 as byte && c <= 122 as byte ||
+                c == 46 as byte ||
+                c == 95 as byte ||
+                c == 43 as byte ||
+                c == 126 as byte
+        ) {
+            return false
+        }
+    }
+    true
+}
+
+/// ASCII/UTF-8 byte lexical order normalized to -1, 0, 1.
+pub fn lexical(a: str, b: str) -> int {
+    let x = a.bytes()
+    let y = b.bytes()
+    var i = 0
+    while i < x.len && i < y.len {
+        if x[i] < y[i] { return -1 }
+        if x[i] > y[i] { return 1 }
+        i += 1
+    }
+    if x.len < y.len { return -1 }
+    if x.len > y.len { return 1 }
+    0
+}
+
+/// Compare arbitrary-length nonnegative decimal runs.
+pub fn numeric(a: str, b: str) -> int {
+    let x = a.bytes()
+    let y = b.bytes()
+    var i = 0
+    var j = 0
+    while i < x.len && x[i] == 48 as byte { i += 1 }
+    while j < y.len && y[j] == 48 as byte { j += 1 }
+    if x.len - i < y.len - j { return -1 }
+    if x.len - i > y.len - j { return 1 }
+    lexical(part(a, i, a.len), part(b, j, b.len))
+}
+
+fn class(c: byte) -> int {
+    if c == 126 as byte { return 0 }
+    if c == 43 as byte || c == 46 as byte || c == 95 as byte { return 2 }
+    if c >= 48 as byte && c <= 57 as byte { return 4 }
+    3
+}
+
+/// Compare valid upstream strings by V1 token classes.
+pub fn upstream(a: str, b: str) -> int {
+    let x = a.bytes()
+    let y = b.bytes()
+    var i = 0
+    var j = 0
+    while i < x.len || j < y.len {
+        var cx = 1
+        var cy = 1
+        if i < x.len { cx = class(x[i]) }
+        if j < y.len { cy = class(y[j]) }
+        if cx < cy { return -1 }
+        if cx > cy { return 1 }
+        var ie = i + 1
+        var je = j + 1
+        if cx >= 3 {
+            while ie < x.len && class(x[ie]) == cx { ie += 1 }
+            while je < y.len && class(y[je]) == cy { je += 1 }
+        }
+        let ax = part(a, i, ie)
+        let by = part(b, j, je)
+        var c = lexical(ax, by)
+        if cx == 4 { c = numeric(ax, by) }
+        if c != 0 { return c }
+        i = ie
+        j = je
+    }
+    0
+}
+
+/// Compare valid complete V2 versions; caller validates first.
+pub fn compare(a: str, b: str) -> int {
+    let x = text.split(a, "-")
+    let y = text.split(b, "-")
+    let ep = text.split(x[0], ":")
+    let eq = text.split(y[0], ":")
+    var e = "0"
+    var f = "0"
+    var u = ep[0]
+    var v = eq[0]
+    if ep.len == 2 { e = ep[0]; u = ep[1] }
+    if eq.len == 2 { f = eq[0]; v = eq[1] }
+    let c = numeric(e, f)
+    if c != 0 { return c }
+    let d = upstream(u, v)
+    if d != 0 { return d }
+    numeric(x[1], y[1])
+}
