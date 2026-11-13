@@ -15,5 +15,5 @@ x86_64-unknown-linux-gnu = "61ce849eac0b531803e5bdf1fe07d91d3d69ecb57f83c5e7eb7c
 
 [std]
 repo = "wolffe-lang/wolf-std"
-rev = "77cf3210a82c93dc05ded987c249bb69e79b0a89"
-tree = "8ed51cc10bbe18b2fc7734c802af84422873899f"
+rev = "bb002f3ed4f4cf87f62e50da3391cb224dc1ebc1"
+tree = "76f1553216ca42f1ad5f90c2059a12a5fd008481"
