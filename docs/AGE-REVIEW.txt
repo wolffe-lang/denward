@@ -2,10 +2,11 @@ Age codec review packet
 
 Status
 
-This is an internal, test-only ordinary binary age v1 X25519 codec. It is not
-independently reviewed, not backup-release authorization, and must not be used
-for a real backup before a separate review. Every command data verb remains
-refused. A locally green development subset is not a full qualification record.
+An independent reading of the initial head required corrections recorded in
+notes/dw04-age-codec.txt. This is an internal, test-only ordinary binary age v1
+X25519 codec, not backup-release authorization. Every command data verb remains
+refused. Real use remains blocked on the std defect fix, requalification and
+controller review; a locally green subset is not a full qualification record.
 
 Required reading, in order
 
@@ -43,6 +44,11 @@ Required reading, in order
    Header recovery's work admission bounds the product of known stanzas
    and supplied identities at 64 before KDF work. Raw argument-line bytes
    count their LF toward 4096. The total raw header cap is 1048576 bytes.
+   Only the first successful unwrap in identity-major then stanza order
+   controls header authentication; a later candidate cannot rescue its MAC.
+   Creation state and create_header are private: encrypt owns each fresh
+   key/nonce pair, and no production caller can retain it for another creation.
+   open_header returns verification material only, never a creation capability.
 6. tests/age/keys/main.lu, tests/age/header/main.lu,
    tests/age/crypto/main.lu, tests/age/driver/main.lu and their wolf.pkg
    files. The driver is not installed. Read tests/age/inventory.json,
@@ -52,11 +58,19 @@ Required reading, in order
    tests/age/boundaries.py, tests/age/measure-child.py, tests/age/fuzz.py,
    tests/age/mac-interop.py and tools/fetch-age-vectors.py. Vector bytes are
    pinned data only from C2SP/CCTV b88c4b206254ac543df240097e0f1fcc6a664821.
-   Unsupported profiles are not passed tests. Compare full plaintext and
+   Unsupported profiles are not passed tests. The 37 armor-prefixed input
+   files have separate format-refusal rows with a valid public native identity,
+   failure and no output; those are not support for the armor profile.
+   Read tests/age/first-unwrap.py and fixtures/first-unwrap.age for the public
+   review reproducer, and tests/age/private-api.py for the API regression.
+   Compare full plaintext and
    authenticated-prefix hashes, including a verified full final chunk that
    reaches the internal sink before appended data makes the operation fail.
 7. tools/age-gate.py, tools/capture-age-code.py, tools/mac-resource.py,
-   tools/gate.py,
+   tools/run-private-crypto.py (hashed concatenated private-helper test copy),
+   tools/division-gate.py, tests/age/division-gate-test.py and
+   tests/age/division-known-sites.json (exact target/function/count/offset/opcode
+   exceptions, pinned compiler/std, all tied to wolf-std#151), tools/gate.py,
    tools/age-witness/linux.manifest, tools/age-witness/admission.manifest,
    tools/age-witness/engine.sh, tools/age-witness/step.sh,
    tools/age-witness/inner.sh, tools/age-witness/preflight.py,
@@ -85,8 +99,8 @@ Per-attempt and per-chunk regions release allocations, not secret erasure.
 The creation draw buffer retains its file key, nonce and ephemeral scalar
 bytes until the enclosing allocation lifetime ends. Individual stanza regions
 release extra scalar/agreement/salt/wrapping-key copies. Header recovery copies
-only selected file-key bytes into the outer list; temporary candidate/KDF/MAC
-allocations end per attempt. A session retains parsed header/transcript, key,
+only the first selected file-key bytes into the outer list; temporary
+candidate/KDF allocations end per attempt and MAC verification follows once. A session retains parsed header/transcript, key,
 payload key and counter. Each payload region holds only a bounded complete
 chunk/tag, candidate plaintext and write slices; successful partial writes
 release each slice in a nested region. Failure unwinds regions but cannot

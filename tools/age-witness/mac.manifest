@@ -12,6 +12,13 @@ rig ../../tests/age/hostile.py committed=../..:HEAD:tests/age/hostile.py
 rig ../../tests/age/seams.py committed=../..:HEAD:tests/age/seams.py
 rig ../../tests/age/seams/fake_fs.lu committed=../..:HEAD:tests/age/seams/fake_fs.lu
 rig ../../tests/age/mac-interop.py committed=../..:HEAD:tests/age/mac-interop.py
+rig ../run-private-crypto.py committed=../..:HEAD:tools/run-private-crypto.py
+rig ../division-gate.py committed=../..:HEAD:tools/division-gate.py
+rig ../../tests/age/division-gate-test.py committed=../..:HEAD:tests/age/division-gate-test.py
+rig ../../tests/age/division-known-sites.json committed=../..:HEAD:tests/age/division-known-sites.json
+rig ../../tests/age/private-api.py committed=../..:HEAD:tests/age/private-api.py
+rig ../../tests/age/first-unwrap.py committed=../..:HEAD:tests/age/first-unwrap.py
+rig ../../tests/age/fixtures/first-unwrap.age committed=../..:HEAD:tests/age/fixtures/first-unwrap.age
 step mac-codec tools=bash,python3,git,clang script=mac-step.sh -- source
 step mac-oracle needs=mac-codec tools=bash,python3,ssh,scp script=mac-step.sh -- oracle
 step mac-read-capture needs=mac-oracle tools=bash,python3,git,clang,nm,otool script=mac-step.sh -- finish

@@ -213,6 +213,21 @@ a production entropy-injection or key-reuse entry point. The release division
 gate must reject every new, moved or missing div/idiv/sdiv/udiv site against
 an exact target/pin/function/count/site inventory tied to wolf-std#151.
 
+Review-response development evidence: the G40 row was committed at f491cc4
+and observed red before 6ca5d3f selected only the first successful unwrap.
+The private-state source obligation at 609f38e was observed red before
+cf41394 removed both public exports. Creation is private, not an advertised
+single-use object: encrypt alone owns fresh raw key/nonce state. Private
+crypto rows run in a hashed production-source copy and print PINSET/VERSION.
+The division-site fixtures at f98d5b1 rejected all instruction widths,
+additions, removals, moves, renames and pin changes; their unwired assertion
+was red before bf4c935 connected capture to the exact defect inventory.
+Bounded native development at a959571 passed both builds, G40, private crypto,
+67 selected vectors/build and 37 separate armor refusal rows/build, plus
+hostile/framing and fault seams. The armor rows use a valid public native
+identity and require format failure with no output; the 77-profile inventory
+classification is unchanged. These are development observations only.
+
 Final exact-head records, binary/runtime/image/rig digests, every END line,
 per-file checked/native/lupin posture, reference release/digests, interop table,
 generated-code observations, cap/mutation seed/counterexamples, RSS measurements

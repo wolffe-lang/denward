@@ -26,6 +26,13 @@ rig ../../tests/age/measure-child.py committed=../..:HEAD:tests/age/measure-chil
 rig ../../tests/age/fuzz.py committed=../..:HEAD:tests/age/fuzz.py
 rig ../../tests/age/mac-interop.py committed=../..:HEAD:tests/age/mac-interop.py
 rig ../../.wolf-bin/std-source/docs/dw03-witness/run-selected.py committed=../../.wolf-bin/std-source:bb002f3ed4f4cf87f62e50da3391cb224dc1ebc1:docs/dw03-witness/run-selected.py
+rig ../run-private-crypto.py committed=../..:HEAD:tools/run-private-crypto.py
+rig ../division-gate.py committed=../..:HEAD:tools/division-gate.py
+rig ../../tests/age/division-gate-test.py committed=../..:HEAD:tests/age/division-gate-test.py
+rig ../../tests/age/division-known-sites.json committed=../..:HEAD:tests/age/division-known-sites.json
+rig ../../tests/age/private-api.py committed=../..:HEAD:tests/age/private-api.py
+rig ../../tests/age/first-unwrap.py committed=../..:HEAD:tests/age/first-unwrap.py
+rig ../../tests/age/fixtures/first-unwrap.age committed=../..:HEAD:tests/age/fixtures/first-unwrap.age
 step codec-default image=localhost/r41-toolchain:1 tools=bash,python3,git,clang,gcc script=step.sh -- default
 step codec-release image=localhost/r41-toolchain:1 tools=bash,python3,git,clang,gcc script=step.sh -- release
 step command-gate image=localhost/r41-toolchain:1 tools=bash,python3,git,clang,gcc script=step.sh -- native
