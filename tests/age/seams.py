@@ -12,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 MODEL_MAIN = r'''
 fn model(data: List[byte], read_max: int, write_max: int, event: int, event_at: int) -> fs.File {
-    fs.File { data: copy data, at: 0, read_max: read_max, write_max: write_max,
+    var buffer = List[byte]()
+    for value in data { (mut buffer).push(value) }
+    fs.File { data: buffer, at: 0, read_max: read_max, write_max: write_max,
         event: event, event_at: event_at, calls: 0 }
 }
 fn main() -> !int {
@@ -89,7 +91,9 @@ fn main() -> !int {
 PAX_MAIN = r'''
 use std.hex
 fn model(data: List[byte]) -> fs.File {
-    fs.File { data: copy data, at: 0, read_max: 17, write_max: 3,
+    var buffer = List[byte]()
+    for value in data { (mut buffer).push(value) }
+    fs.File { data: buffer, at: 0, read_max: 17, write_max: 3,
         event: 0, event_at: 0, calls: 0 }
 }
 fn main() -> !int {
