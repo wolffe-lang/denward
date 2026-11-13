@@ -156,8 +156,37 @@ The parent values are context, not guaranteed lower bounds for child RSS;
 the observed child values are lower. Do not subtract them to claim intrinsic
 memory. Each child had a 268435456-byte address-space cap. These remain
 older-head development observations, not final exact-head qualification.
-The independent reading and remaining seam/mutation/cap/plant/final-record
-requirements remain open.
+At d35359d, admission.log completed all six steps with exit zero, SHA-256
+e240a26da2b838819576cf21d760c9b52fdef4d5e8d6044cbc657829b9e1e259.
+Both builds passed the fault/admission models and all exact boundaries.
+The maximum 1048576-byte header authenticated/decrypted within the stronger
+256 MiB address-space bound: child rusage peaks were 10464 KiB default and
+10212 KiB release (parent references 23240 and 23492 KiB). One byte above
+returned budget with no plaintext. The suspected raw-base64 temporary-retention
+problem did not reproduce at this bound; neither std nor the cap was changed.
+
+Each build's parser mutation run completed 3000 cases across the three seeds
+and all eight mutation categories, 375 per category, with zero counterexamples:
+2433 header, 490 parsed, 65 budget and 12 unsupported outcomes. Coverage is of
+these grammar/outcome categories only. The journals and coverage JSON are
+retained with the records; bounded minimization remains armed for failures.
+
+At the same development head, native macOS ciphertext was read by reference
+age for both recipients at every listed size, and reference ciphertext was
+read by the native macOS codec for both identities; wrong identities refused.
+The two source-head-bound fixture manifests and complete exit statuses are
+part of the interoperability evidence, not a same-tool roundtrip.
+
+The current-context arm64 captures at d35359d show default SDIV in X25519
+fe_carry (40), fe_freeze (38), clamp (2) and ladder (4), on secret-derived
+arithmetic paths. The corresponding inspected release functions contain none.
+The earlier x86-64 capture at e6cbfa1 has IDIV counts 40/38/2/4 respectively,
+and none in the inspected release counterparts. These are scoped instruction
+observations, not timing measurements or proof of secret-independent latency.
+Default byte equality and zero checks load/fold every byte before the result;
+release open_header contains a vector/scalar XOR/OR MAC fold followed by its
+outcome branch. Bounds/index/overflow paths and allocator/runtime behavior
+remain separate review obligations. There is no timing certification.
 
 Final exact-head records, binary/runtime/image/rig digests, every END line,
 per-file checked/native/lupin posture, reference release/digests, interop table,

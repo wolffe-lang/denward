@@ -56,8 +56,12 @@ Required reading, in order
    authenticated-prefix hashes, including a verified full final chunk that
    reaches the internal sink before appended data makes the operation fail.
 7. tools/age-gate.py, tools/capture-age-code.py, tools/gate.py,
-   tools/age-witness/linux.manifest, engine.sh, step.sh, inner.sh and
-   preflight.py. Match rig hashes, image identities, limits, every END and
+   tools/age-witness/linux.manifest, tools/age-witness/admission.manifest,
+   tools/age-witness/engine.sh, tools/age-witness/step.sh,
+   tools/age-witness/inner.sh, tools/age-witness/preflight.py,
+   tools/age-witness/mac.manifest, tools/age-witness/mac-step.sh,
+   tools/age-witness/mac-step.py and tools/age-witness/oracle.sh.
+   Match rig hashes, image identities, limits, every END and
    every unsupported/not-run row, not merely wrapper status or test counts.
    Read generated default/release objects/disassemblies on both targets.
 8. Reproduce a hostile-file row and both reference interoperability directions
