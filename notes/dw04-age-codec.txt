@@ -1,0 +1,127 @@
+Internal age v1 codec
+
+Forbidden
+
+No new cryptography or external implementation source. Inputs are the published
+age specification, RFCs, BIP-173, published vector data and the selected owned
+standard-library modules. No armor, scrypt derivation, SSH/plugin/PQ recipients,
+custom AAD/labels, outer envelope, append/resume or real identities. No command
+verb is enabled. A test-only driver is not installed. No plaintext archive spool,
+secret argument/environment/log, secret-erasure claim or timing certification.
+
+Inputs verified
+
+Base: 08dd953d6a0594b8a7536bffdcbf786dd3ee236f. The prerequisite-only commit
+pins std bb002f3ed4f4cf87f62e50da3391cb224dc1ebc1, tree
+76f1553216ca42f1ad5f90c2059a12a5fd008481, with wolf 0.2.39 and lupin 0.1.61.
+The archive identities remain those in wolf-toolchain.toml. The compiler and
+paired runtime are one set, to be captured with binary hashes by each record.
+The prerequisite PR's record digests have been read as claims, not independently
+verified by this implementation lane.
+
+age document: C2SP/C2SP fc7f312aff098ed080f3dd5a3da4fd820be17a2e,
+SHA-256 b0a767b91a184c536e8a04002f7bba7521388fee3989f5891e23cc1aaa00232f.
+BIP-173: bitcoin/bips b34d9f751791d4feb22feff4f2ed00bcac83961b,
+SHA-256 b19eab06b264bbd15ad7f7d640fa34de8f4a8809fba8a6ecc3e165545b27a543.
+RFCs 7748, 5869, 2104, 8439 and 4648 supply the primitive contracts; primitives
+are called, not implemented here. Testkit data: C2SP/CCTV
+b88c4b206254ac543df240097e0f1fcc6a664821, age/testdata only, 147 files.
+The testkit generator, implementation and dependencies are not inputs.
+
+Prediction
+
+Written before codec code. tests/age/inventory.json assigns each published
+case a class and records its immutable data digest and expected payload/prefix
+hash. valid means complete decryption; invalid includes no-match/authentication/
+truncation failures. unsupported identifies a vector for a deliberately absent
+profile, not a successful parse or a skip counted as a measured primitive pass.
+No published case is predicted out-of-budget; extra generated cap rows are.
+
+1. Key text: key-text accepts only all-one-case BIP-173, age recipient or
+age-secret-key- identity, canonical exactly 32 decoded bytes; presentation of
+identities is wholly uppercase. Mixed case, Bech32m, wrong HRP, short/long data,
+nonzero/excess conversion padding and checksum mutation refuse without echo.
+Delegate all base64/Bech32 operations to std, never private copies.
+2. Header: parser validates original raw bytes with exact version, LF, spaces,
+VCHAR arguments and canonical unpadded standard base64. Each body has zero or
+more 64-column lines plus a mandatory shorter last line (possibly empty).
+Preserve the original transcript through the three '-' bytes, excluding the
+following space and MAC. Unknown valid stanzas stay in the transcript and are
+never executed. Validate every known X25519 stanza, even after a usable one:
+exactly two arguments counting the type, 32-byte ephemeral share and 32-byte
+body before any unwrap. Reject scrypt mixed with any other stanza.
+3. Wrap: a fresh 16-byte file key per operation, a fresh 32-byte scalar for
+every stanza/file, E=X25519_base(e), S=X25519(e,R) with zero abort. Derive
+HKDF-SHA-256(E||R,S,"age-encryption.org/v1/X25519",32). Seal the 16-byte
+file key with nonce twelve zero bytes and empty AAD. Every recipient wraps
+the same key independently: OR recovery, never two-factor authentication.
+4. Header authentication: derive HKDF-SHA-256(empty,F,"header",32) and
+HMAC-SHA-256 over the exact preserved transcript. Strictly decode 32 MAC
+bytes and use bytes.is_equal_fixed_work over the whole tag. The header-MAC
+position matrix observes no plaintext from a failed header.
+5. Payload: draw a fresh 16-byte nonce and derive
+HKDF-SHA-256(nonce,F,"payload",32). Chunk size is 65536 plaintext bytes,
+AEAD tag is always 16 bytes, AAD empty, nonce=11-byte big-endian counter
+starting zero || final byte 0/1. Empty input emits exactly one empty final
+chunk; a nonempty exact multiple ends with a full final chunk. One byte of
+lookahead distinguishes finality; short reads never mean EOF.
+6. Decrypt: buffer a whole ciphertext chunk/tag before authentication; expose
+only a verified chunk. Require a valid final chunk followed immediately by
+EOF. The vector judge hashes all emitted authenticated prefix even on error.
+Appended bytes, second files, altered/reordered/dropped/spliced chunks, missing
+or empty noninitial final chunks fail. A sink spy checks zero bytes from a
+failed chunk. No test driver reports archive/backup/restore success.
+7. Lifetimes: per-chunk regions release temporary allocations, not erase
+secrets. Lifetime and Linux RSS rows use two generated stream sizes, a small
+parent and a hard memory cap. Trace key/plaintext/ciphertext copies on error.
+Nonce-seam tests independently exercise carry across every counter byte and
+overflow, without shrinking production widths or writing impossible volumes.
+
+Bounds remain 1 MiB raw header, 64 stanzas/identity attempts, 4096 bytes per
+argument line, signed-64 byte accounting and 256 MiB total process RSS. Bound
+checks precede growth and KDF work. These are application admission limits,
+not age maxima. A changed bound or observable error taxonomy needs approval.
+Expected categories are malformed header/key text, unsupported profile/version,
+wrong key, header authentication, payload authentication/truncation, budget,
+I/O/interruption and entropy_unqualified; exact new API outcome names will be
+frozen before their rows and implementation.
+
+Named groups: key-text; header-grammar; published-vectors; wrap-or-recovery;
+header-mac-positions; payload-tag-positions; framing-seams; stream-io;
+parser-mutations; admission-caps; entropy-refusal; chunk-lifetimes;
+counter-boundaries; interop; primitive-regressions; generated-code.
+Rows are committed before code that changes their result. Default and release
+builds run the codec rows. Shipped binaries are release builds. Generated-code
+observations are scoped to pins/targets, never a timing guarantee.
+
+Approved execution clarification: bounded native macOS units, vectors,
+small interoperability and code capture are allowed in one short record;
+large vectors/streams, fuzz, RSS/lifetimes and the full gate stay on capped
+Linux. PAX creation refusal and entropy-independent decryption are demonstrated
+through a test seam; real PAX interoperability remains open for later work.
+
+Evidence index
+
+Not yet measured. The prediction and inventory are inputs, not pass evidence.
+Final exact-head records, binary/runtime/image/rig digests, every END line,
+per-file checked/native/lupin posture, reference release/digests, interop table,
+generated-code observations, cap/mutation seed/counterexamples, RSS measurements
+and the named authentication plant must be supplied before qualification.
+
+Done-when
+
+An exact-head locally qualified PR and off-line authentication plant are open
+for independent review. A separate reviewer must reconstruct the specification
+checklist, read the complete codec/std/compiler/runtime set, inspect selected
+machine code and reproduce hostile input plus both interop directions. This
+code must not be used for a real backup before that review. Real PAX interop
+is an open later-lane requirement, not a green skip.
+
+The codec does not authorize backup release. Creation/publication, receipt
+trust, complete archive preflight, restore confinement and externally retained
+recovery rehearsal remain integration gates. No professional audit, formal
+proof, FIPS, universal constant time, secure wiping/locking/swap exclusion,
+post-quantum, source-author authentication, rollback protection or compromised
+endpoint resistance is claimed.
+
+Footprint: cross-cutting
