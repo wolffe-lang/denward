@@ -36,4 +36,4 @@ These details settle previously unspecified v1 interpretations before the first 
 
 This manifest does not embed its enclosing archive's digest. The complete stored-file receipt is detached; see stream-v1 and stores-v1.
 
-No reader/writer is implemented at this milestone. Frozen schema fixtures and a future independent parser checker must precede actual backup emission. Any schema change after a released v1 fixture requires explicit compatibility handling, not rewriting the fixture.
+An internal reader validates this manifest's encoding and manifest-only relations at explicit test limits; no writer or complete logical-content verifier is implemented. Frozen schema vectors and an independent mutation checker precede actual backup emission. Any schema change after a released v1 fixture requires explicit compatibility handling, not rewriting the fixture.
