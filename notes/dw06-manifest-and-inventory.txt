@@ -1,0 +1,112 @@
+Logical manifest reader and inventory boundary
+
+Forbidden
+
+No command data verb is enabled. There is no source walker, production inventory
+capacity, complete restricted-control/object-content verifier, restore engine
+or new encryption/archive framing. The owning filesystem prerequisite is
+separate; a path-only whole-directory substitute is not implemented. The
+multi-pass authenticated logical-verification scheduler remains a follow-on.
+No third-party backup, archiver or encryption implementation source was read.
+
+Inputs verified
+
+The reader follows spec/manifest-v1.md, with the independently reversible
+schema clarification committed before frozen vectors. Before: combined
+selection/exclusion phase and unspecified tie/reason/group/count details.
+After: ordered phases/tuples, reason registry, LF-inclusive line and decoded
+string bounds, Unicode Cc paths, explicit symlink bytes/NUL behavior,
+path-named hardlink groups and repeated metadata, declared directory parents,
+zeroed deleted/absent-birthtime fields, all-hole sparse files, duplicate object
+refusal and namespace-versus-unique-object byte totals. See the specification
+for each exact rule rather than treating the tests as normative definitions.
+
+The compiler/runtime/std review set is unchanged. The live command import
+graph is unchanged and the existing core check asserts it. The source-inventory
+module has no I/O capability and always returns inventory_host_unqualified.
+That is a new explicit internal prerequisite name, not a change to CLI taxonomy;
+production inventory admission still has inventory_budget_unqualified.
+
+Prediction
+
+Strict schema-directed scanning preserves duplicate decoded keys and exact
+integer spelling instead of losing them through a generic JSON DOM. Native
+hostile bytes must fail before typed manifest relations can be returned.
+Terminal EOF, checked offsets, type-specific fields and forward hardlinks are
+validated without opening any target path. Object-content hashes, control
+schemas, object-set completeness and sparse logical digests still need a
+separate full verifier. Accepted manifest parsing is never contents_verified.
+
+Evidence index
+
+Frozen vectors were committed against a permissive test driver before the
+reader. Linux and macOS both observed the hostile cases red, including
+manifest_duplicate_decoded_key. The native gate runs 55 frozen vectors plus
+a generated encoded-line over-bound row in both default and release builds.
+The deterministic mutation corpus has 246 cases, seed 610113, SHA-256
+7e4f2c2c44d600d41b2602b9a7cef2e90631f743f3d65bad2aec050755f10afd.
+It includes decoded duplicate keys, unknown-field permutations, legal field
+permutations/whitespace and bytes following end. The model is independent
+expected data, not a second complete backup implementation or formal proof.
+
+The test-only parser profile admits at most 4096 total records, 16777216 raw
+input bytes, 8388608 retained decoded string bytes, 1048576 bytes per encoded
+line including LF, and 4096 decoded bytes per string. All are independently
+bounded. Source inventory has no admitted entries. Fixed 43-slot schema rows
+are retained, with numeric index vectors and bounded per-line/validation
+regions; no source/file-content buffer, inventory spool or generic JSON DOM.
+
+Development native observations, bytes of child peak RSS upper observations:
+                                Linux default   Linux release
+  1 short entry                    12595200        12587008
+  128 short entries                12722176        12718080
+  1024 short entries               12722176        12722176
+  4090 short entries               19865600        19660800
+  1900 maximum-length paths        72290304        72134656
+  combined record/text/input       128892928       128573440
+  input one past                   124420096       124186624
+
+The combined case has 4090 file records plus header/controls/object/end,
+1905-byte names and exactly 16 MiB encoded input. The separate 1900-file case
+uses 4096-byte names. Text, record, line and input one-past cases refuse by name.
+Linux measurements have a 268435456-byte address-space cap and CPU limit.
+The small parent's peak is reported separately, never subtracted; observed
+child peaks can be lower than that parent observation. A plateau near the
+inherited/launcher floor does not identify exact fixed runtime overhead or a
+trustworthy per-entry slope.
+
+macOS uses fixed bounded correctness extremes, not a growth/performance soak.
+At the recorded development take, default/release combined-case peaks were
+127696896/127664128 bytes, long-path peaks 71254016/71221248, and short maximum
+entry-case peaks 19054592/18776064. No macOS address-space-cap claim is made.
+System version, load and exact compiler/runtime/std identities are recorded
+by the native rig. These measurements concern only this parser representation;
+they do not add codec/physical/source inventory costs into an invented release
+capacity. The 256 MiB combined production budget is still unqualified.
+
+Recorder rigs are tools/manifest-witness/linux.manifest and mac.manifest.
+The Linux take runs the complete existing native gate, including the new
+parser default/release step and unchanged command/archive/codec checks. The
+macOS take runs parser default/release hostile, mutation and bounded-profile
+rows under its resource lock. The one-file/one-hunk plant disables only
+duplicate-key rejection and runs only manifest_duplicate_decoded_key in
+recorder plant mode; no unrelated red row may count as its evidence. Exact
+head records and hosted run identities accompany the pull request.
+
+Done-when
+
+- [x] Strict internal reader and explicit refusing inventory boundary.
+- [x] Frozen hostile rows observed red on Linux and macOS before reader use.
+- [x] Default/release deterministic mutations and bounded parser memory on
+      Linux and macOS; no production inventory capacity inferred.
+Required handback evidence: exact-head recorder native Linux and macOS records
+plus the named plant. Hosted Linux and macOS native jobs must be green before
+merge. The pull request links those records and reports any pending host job.
+
+Still outside this checkpoint: the owning filesystem prerequisite and reviewed
+pin adoption, then an actual source walker and combined inventory qualification.
+That is intentionally outside this checkpoint, not a waived gate.
+The parser and inventory modules remain unreachable from every command verb.
+README was refreshed for those implemented/planned boundaries. No real backup,
+reinstall, actual metadata preservation, hardware or receiver-readiness claim
+is made by this work.
