@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -eu
 cd "$AGE_ROOT"
+python3 -I tools/age-witness/affinity.py "$AGE_CPUS"
 case "$1" in
   default|release)
     python3 -I tools/age-gate.py --workspace "$AGE_OUT/codec" --data "$AGE_ROOT/.work/age-vectors" --build "$1"

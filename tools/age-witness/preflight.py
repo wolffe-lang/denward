@@ -12,9 +12,24 @@ def refuse(reason):
     raise SystemExit(75)
 
 
-if os.environ.get('AGE_CPUS') != '6-11':
-    refuse('toolchain-image-requires-block-B')
+mask = os.environ.get('AGE_CPUS', '')
+if not mask:
+    refuse('missing-take-cpu-mask')
+try:
+    for part in mask.split(','):
+        ends = [int(v) for v in part.split('-')]
+        if len(ends) == 1:
+            ends *= 2
+        if len(ends) != 2 or not 0 <= ends[0] <= ends[1] < 18:
+            raise ValueError('mask')
+except ValueError:
+    refuse('invalid-or-reserved-take-cpu-mask')
 root = Path(os.environ['AGE_ROOT'])
+logdir = Path(os.environ['AGE_TASKSET_LOGDIR'])
+if logdir.is_symlink() or not logdir.is_dir() or logdir.stat().st_uid != os.geteuid():
+    refuse('translator-log-directory-not-owned')
+if not logdir.resolve().is_relative_to(Path(os.environ['AGE_OUT']).resolve()):
+    refuse('translator-log-directory-outside-record')
 assert shutil.disk_usage(root).free >= 35 * 1024**3, 'disk floor'
 mem = {line.split(':')[0]: int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()}
 assert mem['MemAvailable'] >= 8 * 1024**2, 'memory floor'
@@ -48,8 +63,10 @@ except OSError:
  raise SystemExit(75)
 print('PASS translator log directory',flush=True)
 PY
+taskset -c "$AGE_CPUS" true || exit 75
+taskset -c "$AGE_CPUS" python3 -I "$AGE_ROOT/tools/age-witness/affinity.py" "$AGE_CPUS" || exit 75
 '''
-result = subprocess.run([engine, 'run', '--rm', '--network', 'none', '--memory', '256m', '--env', 'PATH=/opt/s263-rust/bin:/usr/local/bin:/usr/bin:/bin', image, 'bash', '-c', probe])
+result = subprocess.run([engine, 'run', '--rm', '--network', 'none', '--memory', '256m', '--volume', str(root)+':'+str(root)+':ro', '--volume', str(logdir)+':/work/notes/s263-evidence', '--env', 'AGE_ROOT', '--env', 'AGE_CPUS', '--env', 'PATH=/opt/s263-rust/bin:/usr/local/bin:/usr/bin:/bin', image, 'bash', '-c', probe])
 if result.returncode:
     raise SystemExit(75 if result.returncode == 75 else result.returncode)
 print('PASS standalone preflight: clean snapshot, disk/memory floors, binary/image pins and tools; no take run', flush=True)

@@ -9,6 +9,7 @@ import resource
 import time
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 SIZES = [0, 1, 65535, 65536, 65537, 131072, 256, 100003]
@@ -29,6 +30,7 @@ def main():
         raise ValueError('native macOS arm64 execution required')
     a.output.mkdir(parents=True, exist_ok=False, mode=0o700)
     if a.phase == 'oracle':
+        subprocess.run([sys.executable, '-I', str(ROOT / 'tools/age-witness/affinity.py'), os.environ['LIGHT_CPUS']], check=True)
         for name, digest in PINS.items():
             if hashlib.sha256((a.reference / name).read_bytes()).hexdigest() != digest:
                 raise ValueError('reference pin mismatch')

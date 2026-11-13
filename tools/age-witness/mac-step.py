@@ -74,8 +74,8 @@ if phase == 'preflight':
     for name, path in [('wolf', Path(STATE['wolf'])), ('lupin', Path(STATE['lupin'])), ('runtime', Path(STATE['wolf']).parent / 'libwolf_rt.a')]:
         assert hashlib.sha256(path.read_bytes()).hexdigest() == STATE[name + '_sha256']
     assert hashlib.sha256((ROOT / 'wolf-toolchain.toml').read_bytes()).hexdigest() == STATE['pins_sha256']
-    if os.environ.get('AGE_ORACLE_SLOT') != 'B':
-        print('REFUSED oracle-image-requires-block-B', flush=True)
+    if os.environ.get('AGE_ORACLE_SLOT') not in ['A', 'B', 'C']:
+        print('REFUSED invalid-oracle-slot', flush=True)
         raise SystemExit(75)
     print('PASS Mac standalone preflight; no build or codec row run', flush=True)
 elif phase == 'source':
@@ -85,20 +85,22 @@ elif phase == 'source':
 elif phase == 'oracle':
     host = os.environ['AGE_ORACLE_HOST']
     remote = {key: os.environ[key] for key in ['AGE_ORACLE_ROOT', 'AGE_ORACLE_OUT', 'AGE_ORACLE_INPUT', 'AGE_ORACLE_KEYS', 'AGE_ORACLE_REF', 'AGE_ORACLE_ENGINE', 'AGE_ORACLE_LIGHT', 'AGE_ORACLE_SLOT']}
-    if remote['AGE_ORACLE_SLOT'] != 'B':
-        print('REFUSED oracle-image-requires-block-B', flush=True)
+    if remote['AGE_ORACLE_SLOT'] not in ['A', 'B', 'C']:
+        print('REFUSED invalid-oracle-slot', flush=True)
         raise SystemExit(75)
     script = 'set -eu\numask 077\n'
-    script += 'mkdir -p ' + shlex.quote(remote['AGE_ORACLE_INPUT']) + ' ' + shlex.quote(remote['AGE_ORACLE_OUT']) + '\n'
+    logdir = remote['AGE_ORACLE_OUT'] + '/taskset-evidence'
+    script += 'mkdir -p ' + ' '.join(shlex.quote(v) for v in [remote['AGE_ORACLE_INPUT'], remote['AGE_ORACLE_OUT'], logdir]) + '\n'
     run(['ssh', host, 'bash', '-s'], input=script.encode())
     run(['scp', '-pr', str(OUT / 'mac-write') + '/.', host + ':' + remote['AGE_ORACLE_INPUT'] + '/'])
-    exports = {'AGE_ROOT': remote['AGE_ORACLE_ROOT'], 'AGE_OUT': remote['AGE_ORACLE_OUT'], 'AGE_REF': remote['AGE_ORACLE_REF'], 'AGE_KEYS': remote['AGE_ORACLE_KEYS'], 'AGE_INPUT': remote['AGE_ORACLE_INPUT'], 'AGE_ENGINE': remote['AGE_ORACLE_ENGINE'], 'AGE_IMAGE': 'localhost/r41-toolchain:1', 'AGE_CPUS': '6-11'}
+    exports = {'AGE_ROOT': remote['AGE_ORACLE_ROOT'], 'AGE_OUT': remote['AGE_ORACLE_OUT'], 'AGE_REF': remote['AGE_ORACLE_REF'], 'AGE_KEYS': remote['AGE_ORACLE_KEYS'], 'AGE_INPUT': remote['AGE_ORACLE_INPUT'], 'AGE_ENGINE': remote['AGE_ORACLE_ENGINE'], 'AGE_IMAGE': 'localhost/r41-toolchain:1', 'AGE_CPUS': {'A': '4-5', 'B': '10-11', 'C': '16-17'}[remote['AGE_ORACLE_SLOT']], 'AGE_TASKSET_LOGDIR': logdir}
     script = 'set -eu\n'
     for key, value in exports.items():
         script += 'export ' + key + '=' + shlex.quote(value) + '\n'
     script += 'cd "$AGE_ROOT"\npython3 -I tools/age-witness/preflight.py\n'
     script += shlex.quote(remote['AGE_ORACLE_LIGHT']) + ' ' + shlex.quote(remote['AGE_ORACLE_SLOT']) + ' bash "$AGE_ROOT/tools/age-witness/oracle.sh"\n'
     run(['ssh', host, 'bash', '-s'], input=script.encode())
+    run(['scp', '-pr', host + ':' + remote['AGE_ORACLE_OUT'] + '/taskset-evidence', OUT / 'oracle-taskset-evidence'])
     run(['scp', '-pr', host + ':' + remote['AGE_ORACLE_OUT'] + '/returned', OUT / 'mac-return'])
 elif phase == 'finish':
     with build_lock():
