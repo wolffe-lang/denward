@@ -1,0 +1,7 @@
+pkg {
+    name: "test/denward-age-parser",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [fs],
+    deps: { age: { path: "../../../src/age" } },
+}

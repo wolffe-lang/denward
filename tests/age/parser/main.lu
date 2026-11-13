@@ -1,0 +1,33 @@
+//! Test-only bounded parser oracle surface. Never echoes input or key data.
+use age
+use std.fs
+
+fn main() -> int {
+    var source = fs.stdin()
+    var raw = List[byte]()
+    var part = List[byte]()
+    var ended = false
+    while !ended && raw.len < 1048577 {
+        let remaining = 1048577 - raw.len
+        let max = if remaining < 65536 { remaining } else { 65536 }
+        let n = fs.read_into(mut source, mut part, max) else |e| match e {
+            eof => { ended = true; 0 },
+            io => { print("io"); return 1 },
+        }
+        if !ended {
+            if n <= 0 { print("io"); return 1 }
+            for b in part { (mut raw).push(b) }
+        }
+    }
+    let parsed = age.parse_header(raw) else |e| {
+        match e {
+            header => print("header"),
+            budget => print("budget"),
+            unsupported => print("unsupported"),
+        }
+        return 1
+    }
+    if parsed.transcript.len == 0 { return 2 }
+    print("parsed")
+    0
+}

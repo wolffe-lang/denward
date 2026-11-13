@@ -27,7 +27,10 @@ fn main() -> !int {
             }
             List[byte]()
         }
-        assert(refused && out.len == 0)
+        if !refused || out.len != 0 {
+            eprint("FAIL header-mac-positions")
+            return 1
+        }
     }
     print("PASS header-mac-positions")
     var wrong = List[byte]()

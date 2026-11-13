@@ -1,0 +1,51 @@
+//! Test-only descriptor model. Never imported by the production module.
+//! Events are interface-level faults, not kernel or signal measurements.
+
+/// A bounded test byte source or sink; event 1 is zero progress, 2 is I/O,
+/// and 3 is an interrupted operation coarsened to I/O by this interface.
+pub struct File {
+    data: List[byte],
+    at: int,
+    read_max: int,
+    write_max: int,
+    event: int,
+    event_at: int,
+    calls: int,
+}
+
+/// Read at most max/read_max bytes, or explicit EOF/io. Faults can follow
+/// partial progress; a zero-success event deliberately violates progress.
+pub fn read_into(mut f: File, mut buf: List[byte], max: int) -> int ! {eof, io} {
+    f.calls += 1
+    if f.event != 0 && f.at >= f.event_at {
+        if f.event == 1 { (mut buf).reset(); return 0 }
+        return io
+    }
+    if f.at == f.data.len { return eof }
+    var n = f.data.len - f.at
+    if n > max { n = max }
+    if n > f.read_max { n = f.read_max }
+    if f.event != 0 && n > f.event_at - f.at { n = f.event_at - f.at }
+    if n <= 0 { return io }
+    (mut buf).reset()
+    for i in f.at..f.at + n { (mut buf).push(f.data[i]) }
+    f.at += n
+    n
+}
+
+/// Accept at most write_max bytes. Zero-success and terminal/interrupted
+/// errors model the caller-visible contract, without publishing anything.
+pub fn write_some(mut f: File, data: List[byte]) -> int ! {io} {
+    f.calls += 1
+    if f.event != 0 && f.at >= f.event_at {
+        if f.event == 1 { return 0 }
+        return io
+    }
+    var n = data.len
+    if n > f.write_max { n = f.write_max }
+    if f.event != 0 && n > f.event_at - f.at { n = f.event_at - f.at }
+    if n <= 0 { return io }
+    for i in 0..n { (mut f.data).push(data[i]) }
+    f.at += n
+    n
+}
