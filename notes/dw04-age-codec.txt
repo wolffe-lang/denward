@@ -68,6 +68,12 @@ lookahead distinguishes finality; short reads never mean EOF.
 6. Decrypt: buffer a whole ciphertext chunk/tag before authentication; expose
 only a verified chunk. Require a valid final chunk followed immediately by
 EOF. The vector judge hashes all emitted authenticated prefix even on error.
+Development correction from seven red published prefix rows: a full chunk is
+first tried with the nonfinal nonce, then with the final nonce if needed.
+A verified full chunk reaches the internal sink even when the next read finds
+missing finality or trailing bytes. For a verified full final chunk, release
+precedes the EOF check, but no complete-stream success does. Encryption alone
+uses one-byte final-input lookahead. No unauthenticated chunk is released.
 Appended bytes, second files, altered/reordered/dropped/spliced chunks, missing
 or empty noninitial final chunks fail. A sink spy checks zero bytes from a
 failed chunk. No test driver reports archive/backup/restore success.

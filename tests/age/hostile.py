@@ -65,12 +65,12 @@ def main():
                 reject('chunks-swapped', ciphertext[:payload] + second + first)
                 reject('chunk-dropped', ciphertext[:payload] + second)
                 reject('chunk-duplicated', ciphertext[:payload] + first + first + second, plain[:65536])
-                reject('file-concatenated', ciphertext + ciphertext, plain[:65536])
+                reject('file-concatenated', ciphertext + ciphertext, plain)
                 for suffix in [b'\0', b'garbage', bytes(65553)]:
-                    reject('appended-' + str(len(suffix)), ciphertext + suffix, plain[:65536])
+                    reject('appended-' + str(len(suffix)), ciphertext + suffix, plain)
                 seams = [0, 1, 21, 22, header_end - 45, header_end - 1, header_end, header_end + 1, payload - 1, payload, payload + 1, payload + 65535, payload + 65536, payload + 65551, payload + 65552, payload + 65553, len(ciphertext) - 16, len(ciphertext) - 1]
                 for seam in seams:
-                    prefix = plain[:65536] if seam > payload + 65552 else b''
+                    prefix = plain[:65536] if seam >= payload + 65552 else b''
                     reject('truncation-' + str(seam), ciphertext[:seam], prefix)
         return 1 if failures else 0
     finally:

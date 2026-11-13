@@ -383,25 +383,36 @@ pub fn decrypt(mut source: fs.File, mut sink: fs.File, identities: List[List[byt
     var in_count = parsed.transcript.len + 45 + 16
     var out_count = 0
     var counter = zeros(11)
-    var carry = 0 - 1
     while true {
         region chunk {
             var boxed = List[byte]()
-            if carry >= 0 { (mut boxed).push(carry as byte) }
-            var final = fill(mut source, mut boxed, 65552)?
-            carry = 0 - 1
-            if !final {
-                var look = List[byte]()
-                final = fill(mut source, mut look, 1)?
-                if !final { carry = look[0] as int }
-            }
+            let ended = fill(mut source, mut boxed, 65552)?
             in_count = add_count(in_count, boxed.len)?
             if boxed.len < 16 { return truncated }
-            if final && boxed.len == 16 && out_count != 0 { return truncated }
-            let plain = chacha20.open(payload_key, stream_nonce(counter, final), List[byte](), boxed)?
+            if boxed.len == 16 && out_count != 0 { return truncated }
+            // A full chunk can authenticate as nonfinal or final. Do not
+            // make release of a verified full chunk depend on later bytes:
+            // published failure vectors require its authenticated prefix.
+            var final = ended
+            var plain = List[byte]()
+            if !final {
+                plain = chacha20.open(payload_key, stream_nonce(counter, false), List[byte](), boxed) else |tag| {
+                    final = true
+                    List[byte]()
+                }
+            }
+            if final {
+                plain = chacha20.open(payload_key, stream_nonce(counter, true), List[byte](), boxed)?
+            }
             out_count = add_count(out_count, plain.len)?
             write_all(mut sink, plain)?
-            if final { return out_count }
+            if final {
+                if !ended {
+                    var extra = List[byte]()
+                    if !fill(mut source, mut extra, 1)? { return truncated }
+                }
+                return out_count
+            }
             advance_counter(mut counter)?
         }
     }
