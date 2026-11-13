@@ -1,4 +1,5 @@
 //! Test-only bounded parser oracle surface. Never echoes input or key data.
+
 use age
 use std.fs
 
