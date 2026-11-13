@@ -1,0 +1,51 @@
+// Published age specification key examples: public test material only.
+use age
+use std.bech32
+use std.bytes
+use std.str as text
+
+fn rejected(s: str, secret: bool) -> bool {
+    if secret {
+        let b = age.identity(s) else |key| { return true }
+        return b.len == 0
+    }
+    let b = age.recipient(s) else |key| { return true }
+    b.len == 0
+}
+
+fn main() -> !int {
+    let sk = "AGE-SECRET-KEY-1GFPYYSJZGFPYYSJZGFPYYSJZGFPYYSJZGFPYYSJZGFPYYSJZGFPQ4EGAEX"
+    let pk = "age1zvkyg2lqzraa2lnjvqej32nkuu0ues2s82hzrye869xeexvn73equnujwj"
+    let s = age.identity(sk)?
+    let p = age.recipient(pk)?
+    assert(s.len == 32 && p.len == 32)
+    for b in s { assert(b == 66 as byte) }
+    assert(age.identity_text(s)? == sk)
+    assert(age.recipient_text(p)? == pk)
+    assert(bytes.is_equal_fixed_work(age.identity(text.lower(sk))?, s))
+    assert(bytes.is_equal_fixed_work(age.recipient(text.upper(pk))?, p))
+    for value in ["", "age1", "a12UEL5L", "a12uel5l", "ssh-ed25519 AAAA", sk] {
+        assert(rejected(value, false))
+    }
+    assert(rejected(pk, true))
+    assert(rejected("aGE1zvkyg2lqzraa2lnjvqej32nkuu0ues2s82hzrye869xeexvn73equnujwj", false))
+    for n in [0, 1, 31, 33, 40] {
+        var wrong = List[byte]()
+        for _ in 0..n { (mut wrong).push(66 as byte) }
+        assert(rejected(bech32.encode_bytes("age", wrong)?, false))
+        assert(rejected(text.upper(bech32.encode_bytes("age-secret-key-", wrong)?), true))
+        var failed = false
+        let out = age.identity_text(wrong) else |key| { failed = true; "" }
+        assert(failed && out == "")
+    }
+    var words = bech32.decode(pk)?.data
+    words[51] = ((words[51] as int + 1) % 32) as byte
+    assert(rejected(bech32.encode("age", words)?, false))
+    for i in 4..pk.len {
+        let original = pk[i..i + 1]
+        let replacement = if original == "q" { "p" } else { "q" }
+        assert(rejected("{pk[0..i]}{replacement}{pk[i + 1..pk.len]}", false))
+    }
+    print("PASS key-text")
+    0
+}
