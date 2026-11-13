@@ -1,8 +1,9 @@
 //! Internal schema-directed manifest reader. Parsing is not content verification.
 use std.fs
-use std.str as text
 use std.x.crypto.sha2
 
+/// Safe input-free refusal categories: malformed tokens, duplicate/unknown keys,
+/// admission, ordering, relations, paths, truncation and I/O. No traps intended.
 pub error Errors = {manifest_syntax, manifest_duplicate_key, manifest_schema, manifest_budget, manifest_order, manifest_relation, manifest_path, manifest_truncated, manifest_io}
 
 /// Test admission only, not a production inventory qualification.
@@ -13,6 +14,7 @@ pub struct Record { strings: List[str], numbers: List[int], present: List[bool] 
 pub struct Manifest { records: List[Record], objects: List[int], files: List[int], extents: List[int] }
 struct Cursor { raw: List[byte], at: int }
 
+/// Hard maximum for the test-only parser, not a source-inventory capacity.
 pub fn test_profile() -> Profile { Profile { records: 4096, input_bytes: 16777216, text_bytes: 8388608 } }
 fn keys() -> List[str] {
     ["record", "schema", "features", "archive_profile", "source_release", "source_manifest", "tool_version", "archive_path", "length", "sha256", "path", "kind", "mount_identity", "baseline_sha256", "reason", "explicit", "id", "type", "mode", "uid", "gid", "user", "group", "object", "link_group", "target", "atime_sec", "atime_nsec", "mtime_sec", "mtime_nsec", "ctime_sec", "ctime_nsec", "birthtime_present", "birthtime_sec", "birthtime_nsec", "sparse", "extent_count", "offset", "object_offset", "file_count", "object_count", "logical_bytes", "stored_object_bytes"]
