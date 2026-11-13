@@ -1,0 +1,65 @@
+use age
+use std.base64
+use std.str as text
+
+fn bad(s: str) -> bool {
+    let parsed = age.parse_header(s.bytes()) else |_| { return true }
+    parsed.transcript.len == 0
+}
+
+fn main() -> !int {
+    let share = "XEl0dJ6y3C7KZkgmgWUicg63EyXJiwBJW8PdYJ/cYBE"
+    let body = "qRS0AMjdjPvZ/WT08U2KL4G+PIooA3hy38SvLpvaC1E"
+    let mac = "HK2NmOBN9Dpq0Gw6xMCuhFcQlQLvZ/wQUi/2scLG75s"
+    let version = "age-encryption.org/v1\n"
+    let stanza = "-> X25519 {share}\n{body}\n"
+    let raw = "{version}{stanza}--- {mac}\n"
+    let parsed = age.parse_header(raw.bytes())?
+    assert(parsed.transcript.len == raw.len - 45)
+    assert(parsed.stanzas.len == 1 && parsed.stanzas[0].share.len == 32)
+    assert(parsed.stanzas[0].body.len == 32 && parsed.tag.len == 32)
+    let unknown = "-> unknown a ~!\n\n"
+    let mixed = age.parse_header("{version}{unknown}{stanza}--- {mac}\n".bytes())?
+    assert(mixed.stanzas.len == 1 && mixed.count == 2)
+    assert((str_from_utf8(mixed.transcript) else "") == "{version}{unknown}{stanza}---")
+    for s in [
+        "", "{version}--- {mac}\n", "{version}{stanza}--- {mac}",
+        "{version}{stanza}--- {mac}\nextra", "{version}{stanza}---  {mac}\n",
+        "{version}{stanza}--- {mac}=\n", "{version}{stanza}--- {mac} \n",
+        "{version}-> X25519\n{body}\n--- {mac}\n",
+        "{version}-> X25519 {share} extra\n{body}\n--- {mac}\n",
+        "{version}-> X25519 {share}=\n{body}\n--- {mac}\n",
+        "{version}-> X25519 {share}\n\n--- {mac}\n",
+        "{version}-> X25519 {share}\n{body}=\n--- {mac}\n",
+        "{version}->  unknown\n\n--- {mac}\n",
+        "{version}-> unknown \n\n--- {mac}\n",
+        "{version}-> unknown\nA\n--- {mac}\n",
+        "{version}-> unknown\nZh\n--- {mac}\n",
+        "{version}-> unknown\n{body}\n\n--- {mac}\n",
+        "{version}-> unknown\r\n\n--- {mac}\n",
+        "{version}-> un\0known\n\n--- {mac}\n",
+        "{version}-> \u{80}\n\n--- {mac}\n",
+        "{version}-> unknown\n{text.repeat("A", 65)}\n--- {mac}\n",
+        "{version}-> unknown\n{text.repeat("A", 64)}\n--- {mac}\n",
+        "{version}{stanza}-> X25519 {share} extra\n{body}\n--- {mac}\n",
+        "{version}{stanza}-> scrypt salt 18\n{body}\n--- {mac}\n",
+    ] { assert(bad(s)) }
+    let empty_last = age.parse_header("{version}-> unknown\n{text.repeat("A", 64)}\n\n--- {mac}\n".bytes())?
+    assert(empty_last.count == 1)
+    let only_scrypt = age.parse_header("{version}-> scrypt salt 18\n{body}\n--- {mac}\n".bytes())?
+    assert(only_scrypt.count == 1 && only_scrypt.stanzas.len == 0)
+    for n in [31, 33] {
+        var bytes = List[byte]()
+        for _ in 0..n { (mut bytes).push(0 as byte) }
+        let encoded = base64.encode_raw(bytes)
+        assert(bad("{version}-> X25519 {encoded}\n{body}\n--- {mac}\n"))
+        assert(bad("{version}-> X25519 {share}\n{encoded}\n--- {mac}\n"))
+    }
+    for n in [63, 64] {
+        let many = age.parse_header("{version}{text.repeat(unknown, n)}--- {mac}\n".bytes())?
+        assert(many.count == n)
+    }
+    assert(bad("{version}{text.repeat(unknown, 65)}--- {mac}\n"))
+    print("PASS header-grammar")
+    0
+}

@@ -1,0 +1,9 @@
+pkg {
+    name: "wolffe-lang/denward-age-header-rows",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [],
+    deps: {
+        age: { path: "../../../src/age" },
+    },
+}
