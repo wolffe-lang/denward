@@ -1,0 +1,29 @@
+Manifest and inventory design prediction
+
+The command remains refusal-only. This work must not import a manifest or
+inventory module from the installed command, change the codec, change physical
+archive framing, change pins, or claim recoverability.
+
+Before implementation, compare the manifest grammar to the exact pinned
+filesystem capability surface. Expect whole-directory listing and path-based
+metadata alone to be insufficient for a bounded, no-follow, metadata-complete
+source inventory. A missing capability must become an explicit prerequisite,
+not a successful inventory produced by a fixture seam or a guessed capacity.
+
+The design will specify strict bounded JSON Lines parsing, cross-record
+validation, deterministic inventory ordering, source-change refusal and the
+independent restore readback contract. Any unresolved schema interpretation or
+required host capability will be listed with alternatives and a recommendation.
+No release entry/extent ceiling will be invented before an actual combined
+representation is measured. An unresolved prerequisite stops implementation and
+is handed back for a decision.
+
+If implementation can proceed, hostile parser/walker rows must be committed and
+observed failing before the fixes; retain mutation, bounded-memory and native
+Linux/macOS evidence, a recorder-mode one-hunk plant, and exact-head records.
+No such row or qualification is claimed by a design-only checkpoint.
+
+For the design-only checkpoint, expect the existing compiler-free core gate to
+remain green on a committed snapshot, no source/pin/workflow/schema diff, and
+README's existing unimplemented logical-parser/inventory statement to remain
+accurate. The core gate cannot qualify the future walker or a memory budget.
