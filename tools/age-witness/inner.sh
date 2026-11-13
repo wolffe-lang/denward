@@ -5,6 +5,16 @@ case "$1" in
   default|release)
     python3 -I tools/age-gate.py --workspace "$AGE_OUT/codec" --data "$AGE_ROOT/.work/age-vectors" --build "$1"
     ;;
+  admission-default|admission-release)
+    mode=${1#admission-}
+    release_arg=()
+    if [ "$mode" = release ]; then release_arg=(--release); fi
+    python3 -I tests/age/boundaries.py --program "$AGE_OUT/codec/$mode/driver" --parser "$AGE_OUT/codec/$mode/parser" --data "$AGE_ROOT/.work/age-vectors" --workspace "$AGE_OUT/admission-$mode" "${release_arg[@]}"
+    ;;
+  fuzz-default|fuzz-release)
+    mode=${1#fuzz-}
+    python3 -I tests/age/fuzz.py --program "$AGE_OUT/codec/$mode/parser" --data "$AGE_ROOT/.work/age-vectors" --workspace "$AGE_OUT/fuzz-$mode"
+    ;;
   native)
     export DENWARD_WORKSPACE="$AGE_OUT/cli"
     python3 -I tools/gate.py --suite native

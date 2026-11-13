@@ -99,6 +99,14 @@ def main():
     step('cli-e2e', [sys.executable, '-I', str(ROOT / 'tests/cli/check.py'), '--program', str(out / 'denward'), '--workspace', str(work)], env)
     step('age-vector-data', [sys.executable, '-I', str(ROOT / 'tools/fetch-age-vectors.py')], env)
     step('age-default-and-release', [sys.executable, '-I', str(ROOT / 'tools/age-gate.py'), '--workspace', str(work / 'age'), '--data', str(ROOT / '.work/age-vectors')], env)
+    if actual == 'linux-x86_64':
+        for mode in ['default', 'release']:
+            stage = work / 'age' / mode
+            command = [sys.executable, '-I', str(ROOT / 'tests/age/boundaries.py'), '--program', str(stage / 'driver'), '--parser', str(stage / 'parser'), '--data', str(ROOT / '.work/age-vectors'), '--workspace', str(work / ('admission-' + mode))]
+            if mode == 'release':
+                command.append('--release')
+            step('age-admission-' + mode, command, env)
+            step('age-parser-fuzz-' + mode, [sys.executable, '-I', str(ROOT / 'tests/age/fuzz.py'), '--program', str(stage / 'parser'), '--data', str(ROOT / '.work/age-vectors'), '--workspace', str(work / ('fuzz-' + mode))], env)
 
 
 if __name__ == '__main__':

@@ -17,6 +17,12 @@ rig ../../tests/age/check.py committed=../..:HEAD:tests/age/check.py
 rig ../../tests/age/hostile.py committed=../..:HEAD:tests/age/hostile.py
 rig ../../tests/age/interop.py committed=../..:HEAD:tests/age/interop.py
 rig ../../tests/age/lifetimes.py committed=../..:HEAD:tests/age/lifetimes.py
+rig ../../tests/age/seams.py committed=../..:HEAD:tests/age/seams.py
+rig ../../tests/age/seams/fake_fs.lu committed=../..:HEAD:tests/age/seams/fake_fs.lu
+rig ../../tests/age/boundaries.py committed=../..:HEAD:tests/age/boundaries.py
+rig ../../tests/age/measure-child.py committed=../..:HEAD:tests/age/measure-child.py
+rig ../../tests/age/fuzz.py committed=../..:HEAD:tests/age/fuzz.py
+rig ../../tests/age/mac-interop.py committed=../..:HEAD:tests/age/mac-interop.py
 rig ../../.wolf-bin/std-source/docs/dw03-witness/run-selected.py committed=../../.wolf-bin/std-source:bb002f3ed4f4cf87f62e50da3391cb224dc1ebc1:docs/dw03-witness/run-selected.py
 step codec-default image=localhost/r41-toolchain:1 tools=bash,python3,git,clang,gcc script=step.sh -- default
 step codec-release image=localhost/r41-toolchain:1 tools=bash,python3,git,clang,gcc script=step.sh -- release

@@ -40,23 +40,27 @@ def main():
         print('VERSION ' + version, flush=True)
     args.workspace.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
-    env.update(WOLF_STD=state['std'], LUPIN_STD=state['std'], TMPDIR=str(args.workspace), CARGO_BUILD_JOBS='2')
+    env.update(WOLF_STD=state['std'], LUPIN_STD=state['std'], TMPDIR=str(args.workspace), CARGO_BUILD_JOBS='2', RAYON_NUM_THREADS='2')
     for mode in (['default', 'release'] if args.build == 'both' else [args.build]):
         stage = args.workspace / mode
         stage.mkdir(exist_ok=True)
-        for unit in ['keys', 'header', 'crypto', 'driver']:
+        for unit in ['keys', 'header', 'crypto', 'driver', 'parser']:
             binary = stage / unit
             command = [state['wolf'], 'build', '--deny-warnings', str(ROOT / ('tests/age/' + unit + '/main.lu')), '-o', str(binary)]
             if mode == 'release':
                 command.append('--release')
             step(mode + '-build-' + unit, command, env)
-            if unit != 'driver':
+            if unit not in ['driver', 'parser']:
                 step(mode + '-' + unit, [str(binary)], env)
         command = [sys.executable, '-I', str(ROOT / 'tests/age/check.py'), '--program', str(stage / 'driver'), '--data', str(args.data), '--workspace', str(stage / 'vectors')]
         if platform.system() == 'Darwin':
             command.append('--small')
         step(mode + '-published', command, env, timeout=600)
         step(mode + '-hostile', [sys.executable, '-I', str(ROOT / 'tests/age/hostile.py'), '--program', str(stage / 'driver'), '--workspace', str(stage / 'hostile')], env, timeout=600)
+        command = [sys.executable, '-I', str(ROOT / 'tests/age/seams.py'), '--workspace', str(stage / 'fault-seams'), '--data', str(args.data)]
+        if mode == 'release':
+            command.append('--release')
+        step(mode + '-fault-seams', command, env, timeout=300)
 
 
 if __name__ == '__main__':

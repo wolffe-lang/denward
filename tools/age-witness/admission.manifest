@@ -1,0 +1,21 @@
+engine ./engine.sh --env=PATH=/opt/s263-rust/bin:/usr/local/bin:/usr/bin:/bin
+floor 35 ../../..
+rig admission.manifest committed=../..:HEAD:tools/age-witness/admission.manifest
+rig engine.sh committed=../..:HEAD:tools/age-witness/engine.sh
+rig step.sh committed=../..:HEAD:tools/age-witness/step.sh
+rig inner.sh committed=../..:HEAD:tools/age-witness/inner.sh
+rig preflight.py committed=../..:HEAD:tools/age-witness/preflight.py
+rig ../age-gate.py committed=../..:HEAD:tools/age-gate.py
+rig ../../tests/age/check.py committed=../..:HEAD:tests/age/check.py
+rig ../../tests/age/hostile.py committed=../..:HEAD:tests/age/hostile.py
+rig ../../tests/age/seams.py committed=../..:HEAD:tests/age/seams.py
+rig ../../tests/age/seams/fake_fs.lu committed=../..:HEAD:tests/age/seams/fake_fs.lu
+rig ../../tests/age/boundaries.py committed=../..:HEAD:tests/age/boundaries.py
+rig ../../tests/age/measure-child.py committed=../..:HEAD:tests/age/measure-child.py
+rig ../../tests/age/fuzz.py committed=../..:HEAD:tests/age/fuzz.py
+step codec-default image=localhost/r41-toolchain:1 tools=bash,python3,git,clang,gcc script=step.sh -- default
+step codec-release image=localhost/r41-toolchain:1 tools=bash,python3,git,clang,gcc script=step.sh -- release
+step admission-default needs=codec-default image=localhost/r41-toolchain:1 tools=bash,python3,clang,gcc script=step.sh -- admission-default
+step admission-release needs=codec-release image=localhost/r41-toolchain:1 tools=bash,python3,clang,gcc script=step.sh -- admission-release
+step parser-fuzz-default needs=codec-default image=localhost/r41-toolchain:1 tools=bash,python3 script=step.sh -- fuzz-default
+step parser-fuzz-release needs=codec-release image=localhost/r41-toolchain:1 tools=bash,python3 script=step.sh -- fuzz-release
