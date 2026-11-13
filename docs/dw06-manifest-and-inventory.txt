@@ -1,0 +1,505 @@
+Logical manifest and source inventory
+
+Design checkpoint, 2026-11-13
+
+Status and authority
+
+This is a proposed implementation design, not a reader, a source inventory,
+a measured admission profile or permission to make a backup. All data verbs
+remain refusal-only. The codec, physical archive framing, dependency pins and
+versioned specifications are unchanged. No implementation or native test has
+run for this design. The prerequisite decision near the end blocks the full
+walker, so implementation stops at this checkpoint rather than substituting
+an incomplete filesystem scan.
+
+The normative inputs are spec/backup-v1.md, spec/manifest-v1.md,
+spec/stream-v1.md and spec/restore-state-v1.md. Read them alongside
+SAFE-OBJECT-FRAMING.md, ARCHIVE-ADAPTER.md, CAPACITY.md and AGE-REVIEW.txt.
+The physical safe-object inspector proves neither logical completeness nor
+restorability. This design introduces no cryptography and no archive format.
+It uses only owned API documentation/source and the existing specifications;
+no other backup, archiver or encryption implementation was consulted.
+
+1. Grammar and admission before allocation
+
+The manifest is a bounded stream of scalar UTF-8 JSON objects, one per final
+LF. It is never executed, imported as a module or passed to an evaluator.
+Its record language is:
+
+    header
+    control(accounts) control(config-defaults) control(installed)
+    selection* exclusion*
+    object*
+    (file extent*)*
+    end EOF
+
+The three control records are in archive-path byte order, exactly once each.
+Objects are in id byte order. Files are in decoded path byte order; extents
+immediately follow their owning file. There is exactly one header and end.
+The separate selection-then-exclusion phases above are a proposed
+clarification of the specification's currently combined selection/exclusion
+phase, not a format change made by this note. See the grammar decision.
+
+Each phase has a state machine: record type is admitted before constructing
+its typed value. A late control/object, extent without its current sparse
+file, second header/end, missing mandatory phase record, or any byte after
+end's LF refuses manifest_order. A missing LF or premature EOF refuses
+manifest_truncated. An I/O error never becomes EOF. Counts and byte totals
+are independently accumulated; end is a comparison, not allocation authority.
+Empty object/file sets are valid structurally if their controls and references
+are subsequently complete. Empty selection policy is a controller decision,
+not automatic permission to regard an empty archive as a backup.
+
+Read at most 131072 bytes per operation. Carry at most one encoded line,
+with a checked encoded-byte limit of 1048576, proposed to include its LF.
+Refuse manifest_line_budget before appending the byte that crosses the limit.
+Do not use an unbounded read-line/read-text routine or read a whole manifest.
+Account for temporary input chunks, line capacity growth and decoded strings,
+not just the live line length. An explicit total encoded-manifest bound,
+record counts, string-arena bytes, index entries and aggregate extents are
+also required: one bounded line alone does not bound an entire inventory.
+Test callers supply a bounded profile; production capacity remains zero until
+qualification. No plaintext file or inventory/sort spool is permitted.
+
+Validate shortest-form scalar UTF-8 before interpreting strings. Reject a
+BOM, malformed/overlong sequences, surrogate scalar values and out-of-range
+code points. JSON escape decoding combines a legal surrogate pair once;
+lone, reversed or incomplete pairs fail. Reject invalid escapes and literal
+unescaped control bytes. Escaped keys are compared after decoding, so
+"path" and "path" are a duplicate. The lexer accepts ordinary JSON
+whitespace inside a framed line, including CR outside strings, but never a
+blank line, comment, a second object or trailing non-whitespace text.
+The canonical writer emits no insignificant whitespace and exactly one LF.
+
+Use a small schema-directed token reader, not std.json.parse followed by
+validation. The pinned JSON reader documents last-key-wins and numeric
+fallback to floating point. Both lose evidence that this format must reject.
+Known keys map to a fixed presence bitset before storing each value; duplicate
+and unknown keys refuse independently of field order. All required bits must
+be present. No arbitrary map, generic nested DOM or recursive expression
+parser is necessary. Arrays occur only for features; the initial profile
+accepts the empty array and refuses any nonempty feature as unsupported.
+An object/array/null in a scalar field fails without descending through it.
+
+Only canonical integer tokens are accepted: 0, a nonzero digit followed by
+digits, or minus followed by a nonzero digit and digits for signed seconds.
+No plus, -0, leading zeros, decimal point or exponent. Compare digit count and
+lexical magnitude to the appropriate signed-64-bit endpoint before arithmetic;
+allow -9223372036854775808 without first constructing its positive magnitude.
+Only atime_sec, mtime_sec, ctime_sec and birthtime_sec may be negative.
+All byte sums, offsets, counts and products use checked nonnegative arithmetic.
+Range-check with length <= limit - offset after checking offset <= limit,
+never an unchecked offset + length. uid/gid fit 0..4294967295, modes 0..4095
+and nanoseconds 0..999999999. Booleans are exactly true or false, not integers.
+
+Use the exact required key sets in spec/manifest-v1.md, not permissive field
+projection. Fixed digest strings are exactly 64 lowercase hexadecimal bytes.
+Empty digest strings are allowed only in fields whose type explicitly allows
+that inapplicable value. Validate string lengths before growing their decoded
+storage; encoded escape expansion and decoded bytes have separate counters.
+Paths/link texts are at most 4096 decoded UTF-8 bytes. Proposed other textual
+fields are also at most 4096 decoded bytes; do not silently impose that policy
+until the grammar decision is accepted. The line bound remains independent.
+
+2. Typed records and cross-record validation
+
+Header binds schema 1, empty features, pax-objects-v1, exact source-release
+and source-manifest digests and a nonempty tool version. Control records bind
+the three payload lengths/digests, not control/manifest's own hash.
+
+A normalized logical path is relative, has no NUL, control, backslash,
+empty/dot/dot-dot component or trailing slash, and is within the decoded-byte
+bound. Empty path is legal only for a root selection. No Unicode case folding,
+normalization, slash repair, lossy decoding or name renaming occurs. Compare
+validated decoded UTF-8 bytes, not JSON spelling or locale. Platform name
+collisions on a restore target are a separate preflight refusal, not a reason
+to silently change source names. The grammar decision must pin what Unicode
+control characters means for path validation.
+
+Object id and objects/<id> must agree. Each unique object's length is bounded
+and summed once, with overflow refusal. Sorted strict ids reject duplicates,
+even equal duplicates. Content equality permits shared objects, never invented
+hard-link identity. The physical inspector's exact object set/length/hash must
+match this set at finalization; an object record is not itself a consuming
+reference that explains an otherwise orphan physical object.
+
+File records contain every specified key. Validate type-specific applicability
+before retaining references:
+
+- Nonsparse regular: complete logical digest, one direct object of matching
+  length, no target and no extents. The empty regular file references the
+  zero-length object's actual SHA-256, not an empty digest.
+- Sparse regular: complete logical digest, no direct object, exact consecutive
+  extent count. Positive lengths, nonnegative ordered disjoint ranges within
+  logical length, and object subranges within their declared lengths. Holes
+  contribute zeros to the logical hash. An all-hole nonempty file may have
+  zero extents; zero-byte data is not evidence of a physical hole.
+- Directory: zero length, empty digest/object/target, no sparse map or extents.
+- Symlink: target is bounded UTF-8 data, not a path to traverse. Its exact UTF-8
+  bytes, digest, object bytes and declared byte length must agree. Absolute,
+  dangling and dot-dot target text is preserved as data. NUL cannot be recreated
+  by the host and must refuse before apply, not be truncated.
+- Hardlink: target names a declared regular file, not a directory, symlink or
+  another hardlink. Resolve forward references after reading the complete
+  manifest. Group identity and effective metadata must agree. Never infer a
+  group from equal content hashes. No cycles, link chains or out-of-set target.
+- Deleted: no content/digest/object/target, no sparse map or extents. This is
+  old-configuration deletion intent; only a separately approved configuration
+  action may remove a target path. It grants no recursive delete authority.
+
+Mode/owner/time/type contradictions, inapplicable nonzero fields, duplicate
+paths and an existing nondirectory logical ancestor refuse. A hardlink's
+content fields, the exact matching-metadata tuple, group-token spelling and
+missing-parent handling need the grammar decision below. Do not invent them
+inside fixtures and accidentally freeze an interpretation as compatibility.
+
+References from files/extents and from the independently parsed accounts and
+configuration controls must resolve to exactly the declared objects. Restricted
+control parsers use the same strict lexer and separate typed schemas; password
+databases remain opaque bytes. Validate installed header/package/unmanaged/end
+ordering and totals separately. A manifest-only reader cannot claim there are
+no orphan objects until these controls have been parsed and their references
+collected. Do not treat controls as uninterpreted trusted reference lists.
+
+Keep three explicit states: syntactically parsed, relations validated, and
+complete logical contents verified against physical objects/controls. None is
+backup success. The end totals must recompute exactly, including a documented
+choice for hardlink and symlink logical-byte counting. No unresolved reference,
+unsupported metadata or unknown required feature can reach the final state.
+
+3. Source domain, selection and order
+
+The source inventory is a census plus classification, not a recursive copy of
+account homes and not an archive of the old root. Establish the exact source
+root, mount identities, image manifest/release, account database and original
+configuration baselines first. Missing/mismatched/untrusted baselines, unknown
+owners, a missing expected mount and unclassified persistent paths block a
+complete plan. Selection/exclusion is visible data bound to those identities.
+
+Enumerate every source domain including mount boundaries. Do not enter device
+or pseudo-filesystem trees just to discover they are excluded. Classify their
+mount/root identity and record the explicit exclusion. Repeated device names
+or path prefixes do not establish mount identity; nested/bind mounts need the
+qualified mount census. Enter an external mount only when explicitly selected
+and its identity matches; an unexplained boundary blocks. Exclude backup,
+ciphertext cache and operation-state destinations by actual filesystem/object
+identity, including aliases, before content reads.
+
+Include homes with dotfiles and uncommitted/generated work. Do not treat names
+such as target, build or cache as automatic exclusions. Root home '/' is a
+classification request, never a wildcard recursion selecting the base image.
+Include unknown personal top-level paths, changed/added/deleted /etc state,
+non-cache persistent /var/lib, selected local data/programs and restricted audit
+history. Changed shipped executables and unmanaged local programs require
+review, not an invented package identity. Accounts, baseline controls and the
+installation report follow their separate restricted schemas.
+
+Explicit exclusions include unchanged base/kernel/boot/disk structures,
+pseudo-filesystems, runtime pid/lock/socket state, temporary state, live sudo
+timestamps, generated lease/resolver state, known versioned disposable caches
+and the operation's own destinations. A socket/device/FIFO under an already
+approved runtime exclusion is recorded as excluded without opening it; one in
+a selected payload refuses unsupported_socket, unsupported_device or
+unsupported_fifo. A socket is never read as an empty regular file.
+
+Traverse each directory's admitted child names in raw-byte order using a
+bounded no-follow descriptor walk. Invalid UTF-8 names refuse source_name_utf8
+with a bounded escaped diagnostic locator, never a lossy substitute. Reject
+unrepresentable names as source_path_unsupported. Do not log content or print
+raw control bytes. Diagnostic locators are opt-in for sensitive source paths.
+
+Traversal preorder is not global path byte order: a/x sorts after a- even when
+a was visited first. Collect bounded typed entries and sort a vector of entry
+indices by complete path bytes before manifest emission. Sort object ids and
+control/selection/exclusion records separately. Keep visited identities, mount
+identities, hardlink groups and directory stack in the same admitted budget.
+Limit pending names, active depth/handles and aggregate extents as well as final
+file count. Avoid one retained pathname copy for every ancestor and avoid an
+O(n squared) repeated full-list ancestor/reference search. Every index/sort
+scratch allocation belongs to the measured peak.
+
+4. Metadata, links, sparse data and source stability
+
+An entry starts with no-follow metadata and required-field availability. Kind,
+size, modes, ownership, dev/inode/nlink and full-resolution supported times are
+not interchangeable with millisecond stat values. Missing required metadata
+is metadata_capability_unavailable, not an implicit zero. Ctime and birthtime
+are observed-only. Source-set-ID modes require explicit plan approval; they
+never appear as executable physical archive modes.
+
+Enumerate ACLs, xattrs/capabilities and inode flags explicitly. Refuse unsupported
+presence by name; inability to enumerate is metadata_capability_unavailable,
+not proof of absence. macOS ACLs, extended attributes and flags and Linux ACLs,
+xattrs/capabilities/flags need separate qualified host rows. Do not skip them
+because a basic file fixture has none.
+
+Derive hardlink groups from observed dev/inode, not content. Count all selected
+names and compare to the source link count under the quiescent source policy;
+unselected aliases require a reviewed independent-copy decision or
+hardlink_outside_selection. Use the first globally path-sorted selected regular
+name as the target, then serialize remaining names as hardlinks. Hash each inode
+once but validate every alias and the consistency tuple. Keep observed identities
+private to the inventory; they are not portable restore inode numbers.
+
+Require a qualified exact sparse-extent query. Neither zero scanning nor
+st_blocks proves a sparse map. SEEK_DATA/SEEK_HOLE behavior must be qualified
+on the actual backend: conservative extent reporting is not proof of exact
+allocation boundaries. Where exact preservation cannot be established, refuse
+sparse_map_unavailable, including an all-hole file. Check extent progress,
+count, range and overflow before retaining an extent. Hash logical content with
+bounded zero buffers for holes and stored bytes for data; object hashes cover
+only the exact stored bytes. Do not materialize a huge hole or buffer a file.
+
+Backup requires a verified quiescent read-only source, not just --offline or a
+lock. Hold the selected directory/file identities and compare pre-open,
+opened-handle, post-hash and pre-emission metadata. Include kind, identity,
+size, link count, modes, owners, mtime/ctime and required metadata observations;
+verify child-name census and mount identities again before finalization.
+Save original atime before reads and avoid manufacturing a false change from
+the reader's own atime effect. Read exactly the declared window, distinguish
+I/O failure from EOF and detect growth/truncation. Emit source_changed on any
+mismatch, disappearance, replacement, new child or changed metadata. Never
+retry a changed file to a convenient green result in the same session.
+
+Stat equality is not a snapshot: a hostile writer can change/revert data or
+exploit timestamp granularity. Rehashing does not create filesystem atomicity.
+Without qualified quiescence/read-only assurance, refuse source_not_quiescent.
+The emission pass must still hash/check object bytes against the inventory;
+archive layer source-digest validation is retained, not bypassed after a scan.
+Any failure aborts the whole operation without complete publication.
+
+5. Measurement, not a capacity guess
+
+No representation is implemented or measured at this checkpoint. Therefore
+fixed overhead, bytes per entry, safe entry count and safe extent count are
+NOT MEASURED on both supported platforms. Production admission stays
+inventory_budget_unqualified. This note assigns no nonzero release ceiling.
+The physical archive's earlier profile measurements cannot qualify a combined
+logical/source inventory.
+
+Proposed representation is typed file/object/extent vectors, a bounded decoded
+string arena, explicit references/identity tables, and an index sort rather
+than a second deep copy of every record. Region lifetimes must release line
+scratch after each record and read/hash scratch after each chunk. Measure the
+actual lowering/runtime representation; do not equate a source field's apparent
+width with allocated bytes. Caller-provided profiles cannot bypass measured
+allocation charges or convert an unqualified profile to a production one.
+
+Qualification matrix, after the prerequisite API exists:
+
+- Small-parent empty baseline and 0/1/128/1024/4096 entries, then larger counts
+  only within the hard cap and filesystem free-space floor. Report child peak
+  RSS and parent self peak separately; never subtract inherited ru_maxrss.
+- Short/representative/4096-byte paths and link texts, maximal JSON escaping,
+  distinct and highly shared objects, repeated strings, hardlink groups,
+  maximum legal line, deeply nested paths and very wide directories.
+- Independent extent-count growth at fixed file count, all-hole files, many
+  tiny extents, many small sparse files, and maximal object/reference tables.
+- Combined retained physical inventory + manifest/control/selection census +
+  source inventory + sort/index scratch + admitted codec/runtime overhead.
+  Measure both parse and cross-reference/finalization peaks. Testing these
+  components in isolation does not justify adding their observed minima.
+- Count/budget boundary and one-past cases at every allocation site, especially
+  directory enumeration, vector growth, UTF-8 decoding and malformed overlong
+  lines. Repeated near-limit failures must not accumulate region allocations.
+
+Record toolchain/runtime digests, build mode, target, fixture generator seed,
+entry/name/string/extent/reference counts, wall and child CPU, address-space
+or container limits, and measured RSS. Fit a conservative upper envelope with
+fixed overhead, per-entry cost, decoded/encoded-string bytes, extents, indices
+and transient allocator growth. Publish raw observations and the upper bound,
+not a slope taken from two friendly points. Keep explicit headroom below the
+268435456-byte process ceiling and test the proposed maximum directly.
+Several dimensions require a profile, not one magic entries-only limit.
+A rejected over-budget directory must fail before host listing allocation;
+a post-allocation entries.len check cannot satisfy this row.
+
+Memory-growing/generative takes run only in a capped Linux environment. macOS
+runs bounded small fixtures and fixed maximum-profile correctness checks under
+its resource gate, not a growth soak. Hosted Linux and macOS native rows remain
+required before any implementation is merged. Unavailable rows are NOT RUN,
+never inferred green. No measured nonzero ceiling can be asserted today.
+
+6. What complete verify and restore readback must prove
+
+Manifest parsing makes no target writes. First verify independent expected
+stored length/digest, authenticate the complete envelope through terminal EOF,
+validate physical framing and all control/object bytes, resolve the complete
+logical graph and independently hash each logical file including holes.
+All physical objects must be explained and all logical references fulfilled.
+Whole-archive plaintext digest stays restricted; no plaintext sidecar/spool.
+
+Physical object order is by hash, so do not retain one live incremental hash
+state for every sparse logical file or buffer random object data. Preflight
+can make additional complete authenticated decrypt passes over an immutable,
+verified ciphertext cache, selecting an admitted batch of logical files per
+pass. Bound retained hash states and work/pass counts explicitly. Alternatively
+qualify a different bounded verification scheduler before enabling verify.
+A one-pass promise is not part of this design. Source instability in the cache
+invalidates the session; a held descriptor alone is not immutability.
+
+Only a separately approved restore plan may transform uid/gid/configuration
+and create temporary target inodes after full preflight. The apply pass
+continues authenticating/decrypting and checks bytes against that exact plan.
+No manifest path or symlink grants undeclared mutation authority.
+
+Readback uses independent no-follow target observations and complete content
+hashes, not just write counters or the same in-memory object list. Compare:
+logical path/type, exact file length/digest, original symlink text, hardlink
+identity classes (also prove equal-content independent files stayed distinct),
+qualified sparse topology, mapped owners, approved full modes and restorable
+atime/mtime at represented precision. Compare configuration/deletions against
+the approved transformed plan, not blindly against old source state. Ctime and
+birthtime are reported observed-only, never claimed restored.
+
+Read content before finalizing atime; apply directory times last and verify
+with an atime-preserving strategy or fail the atime-restoration row. Verify
+absence only for explicit approved deletions. Sync data/directories and commit
+transaction authority only after the independent readback matches; any mismatch
+is restore_readback_mismatch and keeps maintenance/recovery active. This lane
+does not implement these restore/controller operations or unlock reinstall.
+
+7. Host capability evidence and blocking decision
+
+The exact pinned owned standard library is
+bb002f3ed4f4cf87f62e50da3391cb224dc1ebc1. Relevant public source contracts are
+std/fs/fs.lu:
+
+- read_dir, lines 633-675: sorted text names, returned as a whole List[str].
+- Info/stat/lstat, lines 1200-1311: availability mask and path metadata.
+- read_link, lines 1336-1355: raw target bytes, path-based, unbounded result.
+- entries, lines 1394-1425: whole unsorted byte-name list, followed by a second
+  list construction. The caller cannot admit each child before enumeration.
+- seek/seek_by/seek_end, lines 1488-1562: only start/current/end offsets;
+  no exact sparse-map query.
+- NOFOLLOW/open_mode, lines 2196-2254: final-component protection, not a
+  descriptor-relative no-follow ancestor walk.
+- fstat_record, lines 2297-2333: held-handle Info is useful but is not a bounded
+  directory cursor, ACL/xattr/flags enumeration or read-only mount attestation.
+
+The pinned std module surface contains no openat/fstatat/readlinkat-like
+traversal, bounded directory cursor, sparse-map enumeration or ACL/xattr/flags
+census API. These are observations about this pin, not claims that POSIX or the
+host kernels lack the operations. A new native ABI adapter would itself need
+cross-platform implementation, runtime-handle ownership and qualification;
+it is not supplied by replacing a path with realpath or by adopting a guessed
+OS descriptor. A fixture provider is useful for model tests but cannot stand
+in for real host enumeration/memory proof.
+
+Decision: filesystem prerequisite.
+
+Options are (a) add and qualify the missing bounded capability surfaces in
+the owning toolchain/standard-library projects, then explicitly adopt their
+reviewed pin; (b) separately authorize native host adapters here and qualify
+their ABI/lifetime/metadata/backend contracts; or (c) narrow this checkpoint to
+a manifest-only reader plus an always-refusing host-inventory boundary.
+Recommend (a), with (c) only as an explicitly reduced follow-on deliverable.
+Do not implement a path-only whole-directory walker and call it qualified.
+The current lane cannot choose a new pin or commit owning-project changes as
+an incidental inventory implementation. This decision blocks the full walker,
+and hence its combined representation measurements, before native builds.
+
+Minimum prerequisite contract:
+
+- A borrowed-root descriptor-relative, no-follow, device-checked source walk;
+  bounded byte-name iteration and bounded symlink reads, with EOF distinct from
+  errors and admission before allocation. Bound handles and partial cleanup.
+- Full available metadata and explicit ACL/xattr/flags capability reporting;
+  absence versus unsupported must be distinguishable per backend.
+- Qualified exact sparse maps or an explicit unsupported result, including
+  all-hole, unwritten-extent and dense-zero contrasts on each claimed backend.
+- Qualified mount identity/read-only/quiescence checks that do not confuse
+  read-only mounts with immutable data accessible through another writable
+  alias. Missing system assurance refuses rather than making a snapshot claim.
+- Native Linux/macOS hostile replacement, invalid-name, wide-directory,
+  permission/I/O, mutation and bounded-memory rows with independent observers.
+  PAX support is a separate capability take, never inferred from Linux success.
+
+8. Grammar clarification decision
+
+The published schema has no released parser fixture (tests/fixtures/v1 contains
+only a placeholder). Its prose still leaves interoperability choices. Resolve
+these together before freezing reader vectors; this note does not edit spec/.
+
+Recommend an explicit schema clarification with the following choices:
+
+- Count encoded-line LF in 1 MiB; other user/name/version/identity/reason/group
+  strings are at most 4096 decoded bytes, with narrower fixed digests/enums.
+- Select one canonical selection/exclusion phase order and byte sort/tie policy;
+  recommend selections sorted by (path, kind, mount_identity), then exclusions
+  by path, with duplicate contradictory declarations refused.
+- Publish the fixed exclusion-reason registry before reading it. Proposed
+  identifiers: unchanged_base, boot_state, pseudo_filesystem, runtime_state,
+  temporary_state, authentication_cache, generated_network_state,
+  disposable_cache, backup_destination and explicit_owner_choice. They carry
+  no permission to classify unknown persistent data as disposable.
+- Define path controls as Unicode Cc (C0, DEL and C1), with no normalization.
+  Define symlink NUL refusal while preserving other representable target text.
+- Give every hardlink a nonempty bounded group token naming one regular target;
+  recommend its target path as the token, not content hash or raw inode number.
+  A group singleton is permitted only with explained source-link accounting.
+  Hardlinks repeat their target's logical length/digest, have no direct object,
+  no sparse flag/extents, and match mode/uid/gid/user/group/restorable and
+  observed time fields. birthtime_present=false requires zero birthtime fields.
+- Require explicit directory records for logical parent paths used by apply;
+  otherwise a future planner would invent undeclared parent metadata/actions.
+  Synthetic selection-root parents must be declared, not silently materialized.
+- Sum end.logical_bytes once per regular, hardlink and symlink pathname, with
+  sparse logical length including holes; sum stored_object_bytes once per
+  unique object, including opaque control references. Name these as logical
+  namespace bytes versus unique stored bytes; neither is allocated disk usage.
+
+Alternative: retain the current ambiguous prose and have each implementation
+choose. Reject that alternative: shared fixtures can conceal a shared mistaken
+interpretation. A compatibility revision after shipping must retain old bytes
+and explicitly handle them, not regenerate them. Changing spec/ would be a
+separate cross-cutting change, not silently bundled into this design checkpoint.
+
+9. Implementation and qualification after the decisions
+
+First commit independently constructed accepted/rejected byte fixtures and a
+schema-aware independent checker; retain fixture hashes and provenance. Then
+observe the absent parser/walker rows red on committed snapshots before their
+fixes. Keep modules internal with separate test package descriptors; the live
+command import graph and data-verb refusal e2e remain unchanged.
+
+Manifest hostile rows: malformed scalar UTF-8/escapes/surrogates, BOM/blank or
+unterminated line, escaped duplicate/unknown/missing keys, nested values,
+canonical-number endpoints and overflow, line/aggregate/count one-past limits,
+wrong phase/order/count, invalid paths and conflicting ancestors, object-id/path
+mismatch, orphan/missing references, bad sparse ranges and adjacent overflow,
+hardlink chains/metadata disagreement, incorrect symlink bytes and data after
+end. Test field-order permutations and noncanonical legal JSON string spelling
+without weakening semantic checks.
+
+Inventory host-dependent rows on Linux and macOS: byte-invalid names, socket
+and FIFO, device-kind model plus an isolated real-device prerequisite where
+available, absolute/dangling symlinks without traversal, hardlinks inside and
+outside selection, exact supported sparse-map cases, richer metadata presence
+and unsupported-capability cases, namespace/file replacement during census,
+wide-directory preallocation refusal, added/deleted child, mount exclusion,
+source/output identity aliases and changed-source refusal. Never create a
+real device on a host or infer that a model exercises a real device backend.
+Missing permission/capability is reported not measured, never passed by skip.
+
+Use bounded grammar mutations and filesystem-operation schedules with recorded
+seeds, independent expected reasons and minimized failing inputs. Reject a
+mutated parser that accepts escaped duplicate keys. The required one-file,
+one-hunk plant removes that duplicate-key rejection only, on an off-line plant
+branch. Recorder plant mode must see the single named row
+manifest_duplicate_decoded_key red, with no unrelated red rows. That is a
+planned witness, not a plant result at this checkpoint.
+
+Run exact committed snapshots under the recorder, preserve every END exit and
+run manifest/rig digest, and use keep-going/preflight where required. Retain
+bounded memory and mutation results, not just row counts. Hosted native Linux
+and macOS must both be green at the implementation head before merge. Do not
+rerun an unexplained red to green. Independent complete restored-tree and
+A-to-B/controller gates remain future work, not parser/walker evidence.
+
+Current checkpoint has no hostile native red, mutation run, plant, memory
+measurement, Linux/macOS implementation record or hosted implementation result.
+It intentionally stops at the prerequisite and grammar decisions. README was
+read against this scope; its unimplemented logical parser/inventory statements
+remain current. The required next action is the filesystem-prerequisite scope
+choice, not authorization to use this tool on real data.
