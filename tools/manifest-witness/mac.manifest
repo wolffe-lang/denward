@@ -1,0 +1,9 @@
+floor 25 ../../..
+rig mac.manifest committed=../..:HEAD:tools/manifest-witness/mac.manifest
+rig mac.py committed=../..:HEAD:tools/manifest-witness/mac.py
+rig ../manifest-gate.py committed=../..:HEAD:tools/manifest-gate.py
+rig ../../tests/manifest/check.py committed=../..:HEAD:tests/manifest/check.py
+rig ../../tests/manifest/mutate.py committed=../..:HEAD:tests/manifest/mutate.py
+rig ../../tests/manifest/memory.py committed=../..:HEAD:tests/manifest/memory.py
+rig ../../tests/manifest/measure.py committed=../..:HEAD:tests/manifest/measure.py
+step parser-native tools=python3,git script=mac.py interp=python3

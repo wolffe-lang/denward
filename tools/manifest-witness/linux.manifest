@@ -1,0 +1,12 @@
+engine ../age-witness/engine.sh --env=PATH=/opt/s263-rust/bin:/usr/local/bin:/usr/bin:/bin
+floor 35 ../../..
+rig linux.manifest committed=../..:HEAD:tools/manifest-witness/linux.manifest
+rig run.sh committed=../..:HEAD:tools/manifest-witness/run.sh
+rig ../age-witness/engine.sh committed=../..:HEAD:tools/age-witness/engine.sh
+rig ../gate.py committed=../..:HEAD:tools/gate.py
+rig ../manifest-gate.py committed=../..:HEAD:tools/manifest-gate.py
+rig ../../tests/manifest/check.py committed=../..:HEAD:tests/manifest/check.py
+rig ../../tests/manifest/mutate.py committed=../..:HEAD:tests/manifest/mutate.py
+rig ../../tests/manifest/memory.py committed=../..:HEAD:tests/manifest/memory.py
+rig ../../tests/manifest/measure.py committed=../..:HEAD:tests/manifest/measure.py
+step native image=localhost/r41-toolchain:1 tools=bash,python3,git,clang,gcc script=run.sh
