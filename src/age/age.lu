@@ -6,6 +6,7 @@ use std.bech32
 use std.base64
 use std.str as text
 use std.bytes
+use std.fs
 use std.os.random
 use std.x.crypto.curve25519
 use std.x.crypto.sha2
@@ -244,16 +245,165 @@ pub fn open_header(parsed: Header, identities: List[List[byte]]) -> List[byte] !
 /// Increment the full 88-bit big-endian STREAM counter. `budget` refuses a
 /// malformed width or carry beyond the last value, before any nonce reuse.
 pub fn next_counter(counter: List[byte]) -> List[byte] ! {budget} {
-    if counter.len != 11 { return budget }
     var out = copy counter
+    advance_counter(mut out)?
+    out
+}
+
+fn advance_counter(mut counter: List[byte]) -> () ! {budget} {
+    if counter.len != 11 { return budget }
     var i = 11
     while i > 0 {
         i -= 1
-        if out[i] != 255 as byte {
-            out[i] = (out[i] as int + 1) as byte
-            return out
+        if counter[i] != 255 as byte {
+            counter[i] = (counter[i] as int + 1) as byte
+            return
         }
-        out[i] = 0 as byte
+        counter[i] = 0 as byte
     }
     budget
+}
+
+/// Safe stream outcomes: malformed key/header, admission cap, unsupported
+/// profile, wrong key, header MAC, payload tag, truncated framing, descriptor
+/// I/O/zero progress, or entropy_unqualified. No outcome carries secret input.
+/// OS-random provider traps are NOT caught or renamed. An error is never a
+/// complete backup; an authenticated prefix may already have reached the sink.
+pub error StreamErrors = {key, header, budget, unsupported, no_match, hmac, tag, truncated, io, entropy_unqualified}
+
+fn add_count(total: int, n: int) -> int ! {budget} {
+    if total < 0 || n < 0 || total > 9223372036854775807 - n { return budget }
+    total + n
+}
+
+// Fill to the requested bound, continuing short reads. true means explicit
+// EOF, not a short read. A successful zero-progress read is an I/O failure.
+fn fill(mut source: fs.File, mut dst: List[byte], limit: int) -> bool ! {io} {
+    var part = List[byte]()
+    while dst.len < limit {
+        let n = fs.read_into(mut source, mut part, limit - dst.len) else |e| match e {
+            eof => { return true },
+            io => { return io },
+        }
+        if n <= 0 || n > limit - dst.len { return io }
+        append(mut dst, part)
+    }
+    false
+}
+
+// Retry short writes, but never zero progress. A per-attempt region prevents
+// one-byte writes from retaining successively shorter slice copies.
+fn write_all(mut sink: fs.File, data: List[byte]) -> () ! {io} {
+    var at = 0
+    while at < data.len {
+        var n = 0
+        region write_attempt {
+            n = fs.write_some(mut sink, data[at..data.len]) else |_| { return io }
+        }
+        if n <= 0 || n > data.len - at { return io }
+        at += n
+    }
+}
+
+fn read_header(mut source: fs.File) -> Header ! StreamErrors {
+    var raw = List[byte]()
+    var one = List[byte]()
+    var start = 0
+    while raw.len < 1048576 {
+        let n = fs.read_into(mut source, mut one, 1) else |e| match e {
+            eof => { return truncated },
+            io => { return io },
+        }
+        if n != 1 { return io }
+        (mut raw).push(one[0])
+        if one[0] == 10 as byte {
+            if raw.len - start >= 4 && raw[start] == 45 as byte &&
+                raw[start + 1] == 45 as byte && raw[start + 2] == 45 as byte {
+                return parse_header(raw)?
+            }
+            start = raw.len
+        }
+        if raw.len - start >= 4096 { return budget }
+    }
+    budget
+}
+
+fn stream_nonce(counter: List[byte], final: bool) -> List[byte] {
+    var nonce = copy counter
+    (mut nonce).push(if final { 1 as byte } else { 0 as byte })
+    nonce
+}
+
+/// Encrypt source bytes to the caller's ciphertext sink, without choosing,
+/// closing, syncing or publishing files. Return the complete plaintext count
+/// only after the authenticated final chunk is written. Caller owns abort and
+/// private partial cleanup on every error/interruption. No entropy injection.
+pub fn encrypt(mut source: fs.File, mut sink: fs.File, recipients: List[List[byte]]) -> int ! StreamErrors {
+    let created = create_header(recipients)?
+    let payload_key = sha2.hkdf256(created.payload_nonce, created.file_key, "payload".bytes(), 32)
+    write_all(mut sink, created.raw)?
+    write_all(mut sink, created.payload_nonce)?
+    var in_count = 0
+    var out_count = created.raw.len + 16
+    var counter = zeros(11)
+    var carry = 0 - 1
+    while true {
+        region chunk {
+            var plain = List[byte]()
+            if carry >= 0 { (mut plain).push(carry as byte) }
+            var final = fill(mut source, mut plain, 65536)?
+            carry = 0 - 1
+            if !final {
+                var look = List[byte]()
+                final = fill(mut source, mut look, 1)?
+                if !final { carry = look[0] as int }
+            }
+            in_count = add_count(in_count, plain.len)?
+            out_count = add_count(out_count, plain.len + 16)?
+            let boxed = chacha20.seal(payload_key, stream_nonce(counter, final), List[byte](), plain)
+            write_all(mut sink, boxed)?
+            if final { return in_count }
+            advance_counter(mut counter)?
+        }
+    }
+    // A loop exit is unreachable; never turn it into stream success.
+    truncated
+}
+
+/// Authenticate a whole header, then each complete chunk before writing its
+/// plaintext. Decryption has no entropy prerequisite. Require final AEAD plus
+/// immediate EOF, rejecting appended bytes/second files. The caller's sink is
+/// an internal verification sink, never authority to mutate a restore target.
+pub fn decrypt(mut source: fs.File, mut sink: fs.File, identities: List[List[byte]]) -> int ! StreamErrors {
+    let parsed = read_header(mut source)?
+    let file_key = open_header(parsed, identities)?
+    var payload_nonce = List[byte]()
+    if fill(mut source, mut payload_nonce, 16)? { return truncated }
+    let payload_key = sha2.hkdf256(payload_nonce, file_key, "payload".bytes(), 32)
+    var in_count = parsed.transcript.len + 45 + 16
+    var out_count = 0
+    var counter = zeros(11)
+    var carry = 0 - 1
+    while true {
+        region chunk {
+            var boxed = List[byte]()
+            if carry >= 0 { (mut boxed).push(carry as byte) }
+            var final = fill(mut source, mut boxed, 65552)?
+            carry = 0 - 1
+            if !final {
+                var look = List[byte]()
+                final = fill(mut source, mut look, 1)?
+                if !final { carry = look[0] as int }
+            }
+            in_count = add_count(in_count, boxed.len)?
+            if boxed.len < 16 { return truncated }
+            if final && boxed.len == 16 && out_count != 0 { return truncated }
+            let plain = chacha20.open(payload_key, stream_nonce(counter, final), List[byte](), boxed)?
+            out_count = add_count(out_count, plain.len)?
+            write_all(mut sink, plain)?
+            if final { return out_count }
+            advance_counter(mut counter)?
+        }
+    }
+    truncated
 }
