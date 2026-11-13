@@ -1,0 +1,62 @@
+{
+  "std": "bb002f3ed4f4cf87f62e50da3391cb224dc1ebc1",
+  "compiler": "3fc86f77795afbbd6fbe483fef76c08e7f13a840",
+  "issue": "wolffe-lang/wolf-std#151",
+  "policy": "After the std fix is pinned, targets sites/counts/known are empty; never carry these exceptions to a new pin.",
+  "targets": {
+    "x86_64-unknown-linux-gnu": {
+      "sites": [
+        {
+          "function": "std.bech32.decode_bytes",
+          "offset": "0x143",
+          "opcode": "idiv"
+        },
+        {
+          "function": "std.bech32.decode_bytes",
+          "offset": "0x150",
+          "opcode": "div"
+        },
+        {
+          "function": "std.x.crypto.curve25519.ladder",
+          "offset": "0x23d",
+          "opcode": "div"
+        }
+      ],
+      "counts": {
+        "std.bech32.decode_bytes": 2,
+        "std.x.crypto.curve25519.ladder": 1
+      },
+      "known": [
+        {
+          "function": "std.bech32.decode_bytes",
+          "count": 2,
+          "issue": "wolffe-lang/wolf-std#151"
+        },
+        {
+          "function": "std.x.crypto.curve25519.ladder",
+          "count": 1,
+          "issue": "wolffe-lang/wolf-std#151"
+        }
+      ]
+    },
+    "aarch64-apple-darwin": {
+      "sites": [
+        {
+          "function": "std.bech32.decode_bytes",
+          "offset": "0x138",
+          "opcode": "sdiv"
+        }
+      ],
+      "counts": {
+        "std.bech32.decode_bytes": 1
+      },
+      "known": [
+        {
+          "function": "std.bech32.decode_bytes",
+          "count": 1,
+          "issue": "wolffe-lang/wolf-std#151"
+        }
+      ]
+    }
+  }
+}
