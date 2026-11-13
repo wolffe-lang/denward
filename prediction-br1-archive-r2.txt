@@ -1,0 +1,7 @@
+Archive integration rebase prediction
+
+Keep br1-archive at 40156828ac69f9c9dc6d7eb035cf380f1e309156. Rebase its changes onto trunk 95561e2a149514d50472fa6e36669aae7551b9b4 as br1-archive-r2 and open a new PR after fresh qualification. Earlier records do not cover this tree.
+
+Expected integration delta: the inherited age module and tests remain byte-identical to trunk. Keep default/release codec gates, admission/fuzz rows, generated-code division checks, release command build and binary-aware publication scan. Add archive pin/mutation/probe/growth gates alongside them, not instead. Preserve both the archive physical-only warning and the codec's real-data blockers in the README. The inherited std revision changes from 77cf321 to bb002f3; stage the new pin, never reuse the old std identity. No archive implementation, fixture or upstream vendored byte changes are intended.
+
+Compile/check the complete bounded native suite on macOS first behind the empty-directory build lock with two workers, memory and disk floors. Preflight a clean committed Linux snapshot alone, including all cached vector data and tools, then run one whole combined native/large-archive take and a fresh one-file/one-hunk digest plant in recorder plant mode. Use taskset.real and read back CPU affinity, because the image may remap taskset requests. Keep process/filesystem/timing rows gated on hosted Linux and macOS before merge. Never carry an old record, alter the old branch, label, merge or close a PR.
