@@ -1,0 +1,30 @@
+//! Internal ordinary binary age v1 X25519 codec. Not installed or used by
+//! the refusal-only command. Requires independent review before real use.
+//! Key codecs are deliberately owned by std; never render secret inputs.
+
+use std.bech32
+use std.str as text
+
+/// Exact native X25519 recipient, one case, BIP-173 and canonical 32 bytes.
+/// `key` never contains input or a repaired spelling.
+pub fn recipient(s: str) -> List[byte] ! {key} {
+    bech32.decode_bytes(s, "age", 32) else |parse| { return key }
+}
+
+/// Exact native X25519 identity. Ordinary bytes are not secure storage.
+pub fn identity(s: str) -> List[byte] ! {key} {
+    bech32.decode_bytes(s, "age-secret-key-", 32) else |parse| { return key }
+}
+
+/// Lowercase public recipient spelling. No other profile is generated.
+pub fn recipient_text(b: List[byte]) -> str ! {key} {
+    if b.len != 32 { return key }
+    bech32.encode_bytes("age", b) else |parse| { return key }
+}
+
+/// Uppercase secret-identity presentation. Not fixed-time and never logged.
+pub fn identity_text(b: List[byte]) -> str ! {key} {
+    if b.len != 32 { return key }
+    let encoded = bech32.encode_bytes("age-secret-key-", b) else |parse| { return key }
+    text.upper(encoded)
+}
