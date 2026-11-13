@@ -1,0 +1,10 @@
+pkg {
+    name: "wolffe-lang/denward-archive-probe",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [env, fs],
+    deps: {
+        archive: { path: "../../src/archive" },
+        payload: { path: "../../vendor/package-archive/payload" },
+    },
+}
