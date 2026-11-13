@@ -35,6 +35,9 @@ def main():
         if hashlib.sha256(path.read_bytes()).hexdigest() != state[name + '_sha256']:
             raise ValueError('toolchain binary identity mismatch')
     print('PINSET ' + json.dumps(state, sort_keys=True), flush=True)
+    for name in ['wolf', 'lupin']:
+        version = subprocess.check_output([state[name], '--version'], text=True).strip()
+        print('VERSION ' + version, flush=True)
     args.workspace.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.update(WOLF_STD=state['std'], LUPIN_STD=state['std'], TMPDIR=str(args.workspace), CARGO_BUILD_JOBS='2')

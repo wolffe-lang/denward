@@ -88,7 +88,7 @@ def main():
         step('fmt-' + path.stem, [str(wolf), 'fmt', '--check', str(path)], env)
     out = ROOT / 'target/bin'
     out.mkdir(parents=True, exist_ok=True)
-    step('build-command', [str(wolf), 'build', '--deny-warnings', 'src/denward.lu', '-o', str(out / 'denward')], env)
+    step('build-command', [str(wolf), 'build', '--release', '--deny-warnings', 'src/denward.lu', '-o', str(out / 'denward')], env)
     step('build-unit', [str(wolf), 'build', '--deny-warnings', 'src/unit/main.lu', '-o', str(out / 'cli-unit')], env)
     if actual == 'linux-x86_64':
         headers = subprocess.check_output(['readelf', '-l', str(out / 'denward')], text=True)
@@ -97,6 +97,8 @@ def main():
         print('PASS static-linux-command', flush=True)
     step('cli-unit', [str(out / 'cli-unit')], env)
     step('cli-e2e', [sys.executable, '-I', str(ROOT / 'tests/cli/check.py'), '--program', str(out / 'denward'), '--workspace', str(work)], env)
+    step('age-vector-data', [sys.executable, '-I', str(ROOT / 'tools/fetch-age-vectors.py')], env)
+    step('age-default-and-release', [sys.executable, '-I', str(ROOT / 'tools/age-gate.py'), '--workspace', str(work / 'age'), '--data', str(ROOT / '.work/age-vectors')], env)
 
 
 if __name__ == '__main__':
