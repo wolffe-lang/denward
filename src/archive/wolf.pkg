@@ -1,0 +1,10 @@
+pkg {
+    name: "wolffe-lang/denward-archive",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [fs],
+    deps: {
+        packing: { path: "../../vendor/package-archive/packing" },
+        payload: { path: "../../vendor/package-archive/payload" },
+    },
+}
