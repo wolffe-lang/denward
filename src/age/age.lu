@@ -46,6 +46,8 @@ pub struct Header {
     count: int,
 }
 
+/// Malformed syntax, application admission cap, or absent version/profile.
+/// Named values carry no input and do not trap.
 pub error HeaderErrors = {header, budget, unsupported}
 
 // Limit counts the LF as part of a raw line. Never copy an unbounded line.
