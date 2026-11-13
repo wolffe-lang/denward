@@ -20,6 +20,6 @@ Named rows cover scope, physical archive framing, logical metadata/link/sparse f
 
 ## Current stop conditions
 
-The shared archive audit found a descriptor reader but no ready sink-based archive-writer API at the needed backup limits. Do not silently import its package-specific policy or caps. Publication, exact pin/provenance, a stream adapter and separately tested backup limits precede reuse. No dependency is copied yet.
+The public archive core is now pinned at paxage `2c69152ba9aa760ec5104b65a23ef961bfa83368`, with exact source/licence provenance and explicit caller-admitted profiles. The internal safe-object writer/physical inspector is the first archive-path checkpoint of step 2. It does not import package extraction policy as logical recovery authority or enable a production backup profile. Logical manifest/control validation, source inventory generation, the measured combined entry ceiling, encryption/controller and receive/commit/SSH integration remain unfinished.
 
 The standard encryption provider, qualified sparse/no-follow/journal interfaces, actual journalled installer and maintenance integration are not implemented by this scaffold. All data verbs refuse. The supplied sizing input is about 5.47 GiB allocated, but exact archive capacity and the in-memory entry bound remain admission measurements; no on-disk inventory/sort spool is allowed. See capacity and archive-adapter for the measured-budget prerequisite and revised 6–10-day first-backup phase.
