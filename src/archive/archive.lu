@@ -1,0 +1,176 @@
+//! Safe physical object framing only; not logical verification or publication.
+
+use packing
+use payload
+use std.x.crypto.sha2 as sha2
+
+pub struct Member { path: str, length: int, sha256: str }
+
+pub struct Writer { core: packing.Writer, reason: List[byte] }
+
+fn digest(s: str) -> bool {
+    let b = s.bytes()
+    if b.len != 64 { return false }
+    for c in b {
+        if !(c >= 48 as byte && c <= 57 as byte || c >= 97 as byte && c <= 102 as byte) {
+            return false
+        }
+    }
+    true
+}
+
+// Distinct powers make the required-member set independently countable.
+fn role(path: str) -> int {
+    if path == "control" { return 1 }
+    if path == "objects" { return 2 }
+    if path == "control/accounts" { return 4 }
+    if path == "control/config-defaults" { return 8 }
+    if path == "control/installed" { return 16 }
+    if path == "control/manifest" { return 32 }
+    let b = path.bytes()
+    if b.len != 72 { return 0 }
+    let prefix = "objects/".bytes()
+    for i in 0..8 { if b[i] != prefix[i] { return 0 } }
+    for i in 8..72 {
+        let c = b[i]
+        if !(c >= 48 as byte && c <= 57 as byte || c >= 97 as byte && c <= 102 as byte) {
+            return 0
+        }
+    }
+    128
+}
+
+/// Construction admits no production inventory capacity and performs no I/O.
+pub fn start(fd: int, profile: payload.Profile) -> Writer {
+    Writer { core: packing.writer_start(fd, profile), reason: List[byte]() }
+}
+
+pub fn error(w: Writer) -> str {
+    if w.reason.len > 0 { return str_from_utf8(w.reason) else |_| { "archive-state" } }
+    packing.writer_error(w.core)
+}
+
+fn fail(mut w: Writer, reason: str) -> str {
+    let previous = error(w)
+    if previous != "" { return previous }
+    for b in reason.bytes() { (mut w.reason).push(b) }
+    let _aborted = packing.writer_abort(mut w.core)
+    error(w)
+}
+
+/// Borrowed output; normalized directories only, never an arbitrary source path.
+pub fn directory(mut w: Writer, path: str) -> str {
+    let previous = error(w)
+    if previous != "" { return previous }
+    let r = role(path)
+    if r != 1 && r != 2 { return fail(mut w, "archive-member-name") }
+    let began = packing.writer_begin(mut w.core, packing.Header {
+        path: copy path,
+        kind: "dir",
+        mode: 448,
+        length: 0,
+        target: "",
+        epoch: 0,
+    })
+    if began != "" { return began }
+    packing.writer_end(mut w.core)
+}
+
+/// Hash/copy one exact declared source window; no source is opened or closed.
+pub fn file(mut w: Writer, member: Member, mut source: payload.Stream) -> str {
+    let previous = error(w)
+    if previous != "" { return previous }
+    let r = role(member.path)
+    if r == 0 || r == 1 || r == 2 { return fail(mut w, "archive-member-name") }
+    if member.length < 0 { return fail(mut w, "archive-member-length") }
+    if !digest(member.sha256) { return fail(mut w, "archive-member-digest") }
+    if r == 128 && member.path != "objects/{member.sha256}" {
+        return fail(mut w, "archive-object-name-digest")
+    }
+    if source.fd < 0 ||
+        source.fd == w.core.fd ||
+        source.error != "" ||
+        source.pos != 0 ||
+        source.length != member.length {
+        return fail(mut w, "archive-source-window")
+    }
+    let began = packing.writer_begin(mut w.core, packing.Header {
+        path: copy member.path,
+        kind: "file",
+        mode: 384,
+        length: member.length,
+        target: "",
+        epoch: 0,
+    })
+    if began != "" { return began }
+    var state = sha2.new256()
+    var buffer = List[byte]()
+    while source.pos < source.length {
+        var n = source.length - source.pos
+        if n > w.core.profile.chunk_bytes { n = w.core.profile.chunk_bytes }
+        let got = payload.read_into(source.fd, mut buffer, n) else |_| {
+            source.error = "archive-source-io"
+            return fail(mut w, "archive-source-io")
+        }
+        if got == 0 {
+            source.error = "archive-source-truncated"
+            return fail(mut w, "archive-source-truncated")
+        }
+        if got < 0 || got > n || buffer.len != got {
+            return fail(mut w, "archive-source-read")
+        }
+        source.pos += got
+        sha2.update256(mut state, buffer)
+        let written = packing.writer_data(mut w.core, buffer)
+        if written != "" { return written }
+    }
+    let actual = sha2.to_hex(sha2.final256(take state))
+    if actual != member.sha256 { return fail(mut w, "archive-object-digest") }
+    packing.writer_end(mut w.core)
+}
+
+fn physical_error(entries: List[payload.Entry], hashed: bool) -> str {
+    var required = 0
+    for e in entries {
+        let r = role(e.path)
+        if r == 0 { return "archive-member-name" }
+        if e.owner != 0 || e.group != 0 || e.target != "" {
+            return "archive-member-normalization"
+        }
+        if r == 1 || r == 2 {
+            if e.kind != "dir" || e.length != 0 || e.hash != "" {
+                return "archive-member-type"
+            }
+            if e.mode != 448 { return "archive-member-normalization" }
+        } else {
+            if e.kind != "file" { return "archive-member-type" }
+            if e.mode != 384 { return "archive-member-normalization" }
+            if hashed && !digest(e.hash) { return "archive-member-digest" }
+            if hashed && r == 128 && e.path != "objects/{e.hash}" {
+                return "archive-object-digest"
+            }
+        }
+        if r < 128 { required += r }
+    }
+    if required != 63 { return "archive-missing-control" }
+    ""
+}
+
+/// Exact physical finish is neither encrypted completion nor publication.
+pub fn finish(mut w: Writer) -> str {
+    let previous = error(w)
+    if previous != "" { return previous }
+    let invalid = physical_error(w.core.entries, false)
+    if invalid != "" { return fail(mut w, invalid) }
+    packing.writer_finish(mut w.core)
+}
+
+pub fn abort(mut w: Writer) -> str { fail(mut w, "archive-aborted") }
+
+/// The only success claim here is complete physical inventory validation.
+pub fn inspect(mut source: payload.Stream, profile: payload.Profile) -> payload.Inventory {
+    let inventory = payload.inspect_with_profile(mut source, profile)
+    if inventory.error != "" { return inventory }
+    let invalid = physical_error(inventory.entries, true)
+    payload.Inventory { entries: copy inventory.entries, error: invalid }
+}
