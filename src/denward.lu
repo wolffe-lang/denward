@@ -1,4 +1,5 @@
 //! Refusal-only executable. The command module has no data I/O capabilities.
+
 use cli
 
 fn main() -> int { cli.run(env_args()) }

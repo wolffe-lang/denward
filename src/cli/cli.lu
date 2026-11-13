@@ -120,6 +120,7 @@ fn check(p: Parsed, required: List[str], operands: int) -> str {
 }
 
 fn usage(reason: str) -> int { eprint("denward: usage: {reason}"); 2 }
+
 fn unsupported(capability: str) -> int { eprint("denward: unsupported: {capability}"); 2 }
 
 fn refuse(p: Parsed, required: List[str], operands: int, capability: str) -> int {
@@ -188,19 +189,31 @@ pub fn run(args: List[str]) -> int {
         )
     }
     if command == "backup" {
-        let p = parse(args, 1, ["--source", "--to", "--baseline", "--format"], ["--offline", "--plaintext", "--ack-plaintext-owner-held"])
+        let p = parse(
+            args,
+            1,
+            ["--source", "--to", "--baseline", "--format"],
+            ["--offline", "--plaintext", "--ack-plaintext-owner-held"],
+        )
         let error = check(p, ["--source", "--to", "--offline"], 0)
         if error != "" { return usage(error) }
         let policy = format_error(p, false)
         if policy != "" { return usage(policy) }
         if has(p, "--plaintext") {
-            if text.starts_with(value(p, "--to"), "ssh:") { return usage("plaintext is not permitted over ssh") }
+            if text.starts_with(value(p, "--to"), "ssh:") {
+                return usage("plaintext is not permitted over ssh")
+            }
             return unsupported("backup")
         }
         return unsupported("encrypted-format-provider")
     }
     if command == "verify" {
-        let p = parse(args, 1, ["--expect-sha256", "--expect-bytes", "--identity", "--identity-fd"], ["--decrypt"])
+        let p = parse(
+            args,
+            1,
+            ["--expect-sha256", "--expect-bytes", "--identity", "--identity-fd"],
+            ["--decrypt"],
+        )
         let error = check(p, ["--expect-sha256"], 1)
         if error != "" { return usage(error) }
         let identity = has(p, "--identity") || has(p, "--identity-fd")
@@ -215,11 +228,18 @@ pub fn run(args: List[str]) -> int {
         let p = parse(args, 1, ["--expect-sha256", "--identity", "--identity-fd"], ["--json"])
         let error = check(p, ["--expect-sha256"], 1)
         if error != "" { return usage(error) }
-        if !has(p, "--identity") && !has(p, "--identity-fd") { return unsupported("identity-required") }
+        if !has(p, "--identity") && !has(p, "--identity-fd") {
+            return unsupported("identity-required")
+        }
         return unsupported("archive-list")
     }
     if command == "receive" {
-        let p = parse(args, 1, ["--directory", "--id", "--expect-sha256", "--expect-bytes", "--format"], ["--commit", "--plaintext", "--ack-plaintext-owner-held"])
+        let p = parse(
+            args,
+            1,
+            ["--directory", "--id", "--expect-sha256", "--expect-bytes", "--format"],
+            ["--commit", "--plaintext", "--ack-plaintext-owner-held"],
+        )
         var required = ["--directory", "--id"]
         var capability = "receiver"
         if has(p, "--commit") {
@@ -234,11 +254,21 @@ pub fn run(args: List[str]) -> int {
         return unsupported(capability)
     }
     if command == "send" {
-        return refuse(parse(args, 1, ["--directory", "--id"], ["--receipt"]), ["--directory", "--id"], 0, "sender")
+        return refuse(
+            parse(args, 1, ["--directory", "--id"], ["--receipt"]),
+            ["--directory", "--id"],
+            0,
+            "sender",
+        )
     }
     if command == "restore" {
         return refuse(
-            parse(args, 1, ["--target", "--expect-sha256", "--decisions", "--resume", "--identity-fd"], ["--preview"]),
+            parse(
+                args,
+                1,
+                ["--target", "--expect-sha256", "--decisions", "--resume", "--identity-fd"],
+                ["--preview"],
+            ),
             ["--target", "--expect-sha256"],
             1,
             "restore",
