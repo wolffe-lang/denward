@@ -256,11 +256,11 @@ fn unit(dir: str) -> int {
 fn main() -> int {
     let a = env_args()
     if a.len == 2 && a[0] == "unit" { return unit(a[1]) }
-    if a.len == 3 && a[0] == "emit" { return emit(payload.number(a[1]), a[2]) }
+    if a.len == 3 && a[0] == "emit" { return emit(payload.number(a[1].bytes(), 10), a[2]) }
     if a.len == 2 && a[0] == "inspect" {
         var p = payload.package_profile()
         p.max_data_bytes = 34359738368
-        var input = window(0, payload.number(a[1]))
+        var input = window(0, payload.number(a[1].bytes(), 10))
         let result = archive.inspect(mut input, p)
         if result.error != "" {
             print("refused:{result.error}\n")
