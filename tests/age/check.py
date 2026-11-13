@@ -49,9 +49,10 @@ def main():
             print('NOT-RUN published/' + name + ' reason=large-linux-row', flush=True)
             continue
         fields, ciphertext = vector(args.data / name, case['sha256'])
-        identities = fields.get('identity', [])
-        if any(not key.startswith('AGE-SECRET-KEY-1') for key in identities):
-            raise ValueError('unexpected identity profile in selected vector')
+        # This profile's judge supplies native identities only. The mixed
+        # hybrid_x25519_arg rejection vector also includes an irrelevant PQ
+        # identity; its malformed supported stanza must still reject.
+        identities = [key for key in fields.get('identity', []) if key.startswith('AGE-SECRET-KEY-1')]
         if key_path.exists():
             key_path.unlink()
         fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
