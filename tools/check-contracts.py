@@ -63,7 +63,12 @@ def main():
     require(not bad, 'K17-publication-path-boundary')
     source = '\n'.join(p.read_text() for p in (ROOT / 'src').rglob('*.lu'))
     require(not re.search(r'\b(?:fs_|net_|process_)\w+|\bextern\b', source), 'K18-refusal-shell-no-data-io')
-    print('CONTRACT-RESULT rows=18 failures=0')
+    live = [ROOT / 'src/denward.lu', *sorted((ROOT / 'src/cli').rglob('*.lu'))]
+    imports = {m for p in live for m in re.findall(r'(?m)^\s*use[ \t]+([^\n]+)', p.read_text())}
+    command_pkg = (ROOT / 'src/wolf.pkg').read_text()
+    cli_pkg = (ROOT / 'src/cli/wolf.pkg').read_text()
+    require(imports == {'cli', 'std.str as text'} and re.search(r'capabilities:\s*\[env\]', command_pkg) and re.search(r'capabilities:\s*\[\]', cli_pkg) and 'deps:' not in command_pkg + cli_pkg, 'K19-refusal-shell-closed-import-boundary')
+    print('CONTRACT-RESULT rows=19 failures=0')
 
 
 if __name__ == '__main__':

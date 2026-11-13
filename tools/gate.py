@@ -41,6 +41,8 @@ def main():
     env['TMPDIR'] = str(work)
     env['PYTHONDONTWRITEBYTECODE'] = '1'
     step('contracts', [sys.executable, '-I', str(ROOT / 'tools/check-contracts.py')], env)
+    step('archive-pin', [sys.executable, '-I', str(ROOT / 'tools/check-archive-pin.py')], env)
+    step('archive-pin-mutations', [sys.executable, '-I', str(ROOT / 'tests/archive-pin.py')], env)
     step('storage-judge-replay', [sys.executable, '-I', str(ROOT / 'tests/qemu/assertions.py'), str(ROOT / 'tests/qemu/observed-v1.json'), '--mode', 'judge-replay'], env)
     if a.suite == 'core':
         return
@@ -86,6 +88,7 @@ def main():
         env['WOLF_LD'] = 'cc'
     for path in sorted((ROOT / 'src').rglob('*.lu')):
         step('fmt-' + path.stem, [str(wolf), 'fmt', '--check', str(path)], env)
+    step('fmt-archive-probe', [str(wolf), 'fmt', '--check', str(ROOT / 'tests/archive-probe/main.lu')], env)
     out = ROOT / 'target/bin'
     out.mkdir(parents=True, exist_ok=True)
     step('build-command', [str(wolf), 'build', '--deny-warnings', 'src/denward.lu', '-o', str(out / 'denward')], env)
@@ -97,6 +100,11 @@ def main():
         print('PASS static-linux-command', flush=True)
     step('cli-unit', [str(out / 'cli-unit')], env)
     step('cli-e2e', [sys.executable, '-I', str(ROOT / 'tests/cli/check.py'), '--program', str(out / 'denward'), '--workspace', str(work)], env)
+    step('archive-contracts', [sys.executable, '-I', str(ROOT / 'tools/check-archive.py')], env)
+    if actual == 'linux-x86_64':
+        step('archive-growth-smoke', ['prlimit', '--as=2147483648', sys.executable, '-I', str(ROOT / 'tools/check-archive-large.py'), '--sizes', 'smoke'], env)
+    else:
+        print('SKIP archive-growth reason=capped Linux-only generated stream; never on the Mac', flush=True)
 
 
 if __name__ == '__main__':
