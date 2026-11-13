@@ -1,0 +1,118 @@
+Age codec review packet
+
+Status
+
+This is an internal, test-only ordinary binary age v1 X25519 codec. It is not
+independently reviewed, not backup-release authorization, and must not be used
+for a real backup before a separate review. Every command data verb remains
+refused. A locally green development subset is not a full qualification record.
+
+Required reading, in order
+
+1. The normative document C2SP/C2SP age.md at
+   fc7f312aff098ed080f3dd5a3da4fd820be17a2e, SHA-256
+   b0a767b91a184c536e8a04002f7bba7521388fee3989f5891e23cc1aaa00232f.
+   Independently reconstruct stanza, transcript, HKDF arguments, nonce,
+   empty/exact-multiple/final and immediate-EOF obligations. Read RFCs 7748,
+   5869, 2104, 8439, 4648 and BIP-173 as the referenced specifications.
+2. spec/encryption-v1.md, spec/stream-v1.md, spec/cli-v1.md and
+   notes/dw04-age-codec.txt. Syntax or a verified chunk/prefix never grants
+   backup success or restore authority.
+3. wolf-toolchain.toml, tools/fetch-toolchain.py and each qualification
+   record's PINSET. They form one indivisible review set:
+   - wolf 0.2.39, source identity 3fc86f77795afbbd6fbe483fef76c08e7f13a840;
+     the paired libwolf_rt.a must come from the same pinned release archive.
+   - lupin 0.1.61, source identity a10cbe5745d6092752217932851d3b9c12c66b4d;
+     the prerequisite audit identifies conformance revision
+     5f1f1c949582f53121e4047bc83c86f23ff72240 separately.
+   - std bb002f3ed4f4cf87f62e50da3391cb224dc1ebc1, tree
+     76f1553216ca42f1ad5f90c2059a12a5fd008481.
+   Exact archive digests for both targets are in wolf-toolchain.toml; records
+   additionally bind executable/runtime digests and actual version strings.
+4. At that std revision: docs/dw03-std-for-age.txt,
+   docs/dw03-draft-dw04-age.txt, std/bech32/bech32.lu,
+   std/base64/base64.lu, std/bytes/bytes.lu, std/os/random/random.lu,
+   std/x/crypto/curve25519/curve25519.lu,
+   std/x/crypto/sha2/sha2.lu, std/x/crypto/chacha20/chacha20.lu,
+   std/fs/fs.lu and the selected tests/posture ledger named by its audit.
+   Review the actual selected primitive/runtime path, not nursery banners
+   or historical vector counts as a security certification.
+5. src/age/age.lu and src/age/wolf.pkg, in full. Trace every KDF input and
+   confidential/public distinction. The raw transcript is never re-encoded.
+   All known stanzas are checked before unwrap; zero agreement aborts.
+   Header recovery's work admission bounds the product of known stanzas
+   and supplied identities at 64 before KDF work. Raw argument-line bytes
+   count their LF toward 4096. The total raw header cap is 1048576 bytes.
+6. tests/age/keys/main.lu, tests/age/header/main.lu,
+   tests/age/crypto/main.lu, tests/age/driver/main.lu and their wolf.pkg
+   files. The driver is not installed. Read tests/age/inventory.json,
+   tests/age/check.py, tests/age/hostile.py, tests/age/interop.py,
+   tests/age/lifetimes.py and tools/fetch-age-vectors.py. Vector bytes are
+   pinned data only from C2SP/CCTV b88c4b206254ac543df240097e0f1fcc6a664821.
+   Unsupported profiles are not passed tests. Compare full plaintext and
+   authenticated-prefix hashes, including a verified full final chunk that
+   reaches the internal sink before appended data makes the operation fail.
+7. tools/age-gate.py, tools/capture-age-code.py, tools/gate.py,
+   tools/age-witness/linux.manifest, engine.sh, step.sh, inner.sh and
+   preflight.py. Match rig hashes, image identities, limits, every END and
+   every unsupported/not-run row, not merely wrapper status or test counts.
+   Read generated default/release objects/disassemblies on both targets.
+8. Reproduce a hostile-file row and both reference interoperability directions
+   with independent expected outcomes, not the implementing author's verdict.
+   Reference: age v1.3.2 Linux amd64 archive SHA-256
+   cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10.
+   Binary age SHA-256 eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b2c;
+   age-keygen SHA-256 0a0009db842259d6717f7eeb30acb6b90d2a2eb924c6acd0a0db0ca1f1537899.
+   Binaries are black boxes in a network-isolated container. Recipient files
+   explicitly contain native X25519 recipients. No plugin is executed.
+
+Lifetimes and claim limits
+
+Per-attempt and per-chunk regions release allocations, not secret erasure.
+The creation draw buffer retains its file key, nonce and ephemeral scalar
+bytes until the enclosing allocation lifetime ends. Individual stanza regions
+release extra scalar/agreement/salt/wrapping-key copies. Header recovery copies
+only selected file-key bytes into the outer list; temporary candidate/KDF/MAC
+allocations end per attempt. A session retains parsed header/transcript, key,
+payload key and counter. Each payload region holds only a bounded complete
+chunk/tag, candidate plaintext and write slices; successful partial writes
+release each slice in a nested region. Failure unwinds regions but cannot
+recall authenticated bytes already accepted by the caller's internal sink.
+No descriptor is closed, no file synced/renamed, and no receipt published by
+the codec. Private partial cleanup and interruption/publication authority
+remain the future controller's responsibility.
+
+Limits are application admission, not universal age-format maxima. A 256 MiB
+process memory measurement must include runtime overhead, allocator behavior
+and inherited parent RSS. The Linux lifetime script uses a stronger 256 MiB
+address-space bound and records its small parent's inherited RSS floor; the
+cumulative child peak is an upper bound, not an intrinsic exact child peak.
+
+The prerequisite audit observed secret-derived division in default-build
+x86 X25519 and none in the inspected release counterparts. Retake/read the
+current-context captures; absence of division is not a timing certificate.
+Shipped binaries are release builds. Neither source fixed work, generated
+instruction counts nor vector agreement certifies constant time. Checked and
+lupin budget refusals are unsupported, never measured primitive passes.
+
+PAX creation still refuses entropy_unqualified before drawing; actual PAX
+interoperability remains an open later requirement. Deterministic decrypt has
+no entropy prerequisite. Provider failure after admission still traps under
+the pinned OS-random contract; it is not caught or renamed unavailable, and
+there is no fallback. Qualification still owes the creation/decryption test
+seam, provider/interruption/partial/zero-progress injections, cap boundaries,
+parser mutation coverage/seed/minimized failures, exact-head full records,
+a named authentication plant and the separate independent reading.
+
+No armor, scrypt derivation, SSH/plugin/PQ/hybrid recipients, custom cipher,
+custom labels/AAD, altered tag widths, random chunk nonces, extra wrapper,
+append/resume or rewrap-in-place is implemented. This does not supply archive
+preflight, ciphertext-only durable publication, trusted independent receipts,
+restore confinement, recovery-key retention or a recovery rehearsal.
+
+No professional audit, formal proof, FIPS certification, universal constant
+time, wiping, mlock, swap/dump exclusion, post-quantum protection, whole-system
+encryption, compromised-kernel/endpoint resistance, backup-author
+authentication or freshness/rollback protection is claimed. Anybody knowing
+public recipients can encrypt a replacement. Two recipients provide OR
+recovery, not two-factor authentication. Losing all identities loses recovery.

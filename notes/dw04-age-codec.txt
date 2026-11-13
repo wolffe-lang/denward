@@ -108,7 +108,17 @@ through a test seam; real PAX interoperability remains open for later work.
 
 Evidence index
 
-Not yet measured. The prediction and inventory are inputs, not pass evidence.
+Development checkpoint at 2425c81: macOS default and release key/header/crypto
+units, 67 selected published cases per build, and hostile framing/tag/prefix
+rows passed. Three large supported STREAM vectors are reserved for Linux;
+77 deliberately unsupported-profile cases are inventory entries, not measured
+passes. This checkpoint is not a final exact-head qualification record.
+A prepared Linux take will run the complete vector set, both builds, the full
+command gate, binary-reference interoperability, capped lifetime rows,
+generated-code capture and selected primitive postures. Queue/running status
+is not a green verdict. The independent reading and remaining seam/mutation/
+cap/plant/final-record requirements remain open.
+
 Final exact-head records, binary/runtime/image/rig digests, every END line,
 per-file checked/native/lupin posture, reference release/digests, interop table,
 generated-code observations, cap/mutation seed/counterexamples, RSS measurements
