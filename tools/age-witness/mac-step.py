@@ -74,6 +74,9 @@ if phase == 'preflight':
     for name, path in [('wolf', Path(STATE['wolf'])), ('lupin', Path(STATE['lupin'])), ('runtime', Path(STATE['wolf']).parent / 'libwolf_rt.a')]:
         assert hashlib.sha256(path.read_bytes()).hexdigest() == STATE[name + '_sha256']
     assert hashlib.sha256((ROOT / 'wolf-toolchain.toml').read_bytes()).hexdigest() == STATE['pins_sha256']
+    if os.environ.get('AGE_ORACLE_SLOT') != 'B':
+        print('REFUSED oracle-image-requires-block-B', flush=True)
+        raise SystemExit(75)
     print('PASS Mac standalone preflight; no build or codec row run', flush=True)
 elif phase == 'source':
     with build_lock():
@@ -82,11 +85,14 @@ elif phase == 'source':
 elif phase == 'oracle':
     host = os.environ['AGE_ORACLE_HOST']
     remote = {key: os.environ[key] for key in ['AGE_ORACLE_ROOT', 'AGE_ORACLE_OUT', 'AGE_ORACLE_INPUT', 'AGE_ORACLE_KEYS', 'AGE_ORACLE_REF', 'AGE_ORACLE_ENGINE', 'AGE_ORACLE_LIGHT', 'AGE_ORACLE_SLOT']}
+    if remote['AGE_ORACLE_SLOT'] != 'B':
+        print('REFUSED oracle-image-requires-block-B', flush=True)
+        raise SystemExit(75)
     script = 'set -eu\numask 077\n'
     script += 'mkdir -p ' + shlex.quote(remote['AGE_ORACLE_INPUT']) + ' ' + shlex.quote(remote['AGE_ORACLE_OUT']) + '\n'
     run(['ssh', host, 'bash', '-s'], input=script.encode())
     run(['scp', '-pr', str(OUT / 'mac-write') + '/.', host + ':' + remote['AGE_ORACLE_INPUT'] + '/'])
-    exports = {'AGE_ROOT': remote['AGE_ORACLE_ROOT'], 'AGE_OUT': remote['AGE_ORACLE_OUT'], 'AGE_REF': remote['AGE_ORACLE_REF'], 'AGE_KEYS': remote['AGE_ORACLE_KEYS'], 'AGE_INPUT': remote['AGE_ORACLE_INPUT'], 'AGE_ENGINE': remote['AGE_ORACLE_ENGINE'], 'AGE_IMAGE': 'localhost/r41-toolchain:1'}
+    exports = {'AGE_ROOT': remote['AGE_ORACLE_ROOT'], 'AGE_OUT': remote['AGE_ORACLE_OUT'], 'AGE_REF': remote['AGE_ORACLE_REF'], 'AGE_KEYS': remote['AGE_ORACLE_KEYS'], 'AGE_INPUT': remote['AGE_ORACLE_INPUT'], 'AGE_ENGINE': remote['AGE_ORACLE_ENGINE'], 'AGE_IMAGE': 'localhost/r41-toolchain:1', 'AGE_CPUS': '6-11'}
     script = 'set -eu\n'
     for key, value in exports.items():
         script += 'export ' + key + '=' + shlex.quote(value) + '\n'

@@ -7,6 +7,13 @@ from pathlib import Path
 import shutil
 import subprocess
 
+def refuse(reason):
+    print('REFUSED ' + reason, flush=True)
+    raise SystemExit(75)
+
+
+if os.environ.get('AGE_CPUS') != '6-11':
+    refuse('toolchain-image-requires-block-B')
 root = Path(os.environ['AGE_ROOT'])
 assert shutil.disk_usage(root).free >= 35 * 1024**3, 'disk floor'
 mem = {line.split(':')[0]: int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()}
@@ -27,6 +34,22 @@ engine = os.environ['AGE_ENGINE']
 image = os.environ['AGE_IMAGE']
 actual = subprocess.check_output([engine, 'image', 'inspect', image, '--format', '{{.Id}}'], text=True).strip()
 assert actual.removeprefix('sha256:') == '77fdad6b841abfdb3968ea6137b1edf7248578bdfc4f92e4aab6b2a05f241485', 'image drift'
-probe = 'for t in bash python3 git clang gcc nm objdump taskset; do command -v "$t" >/dev/null || exit 1; done; python3 -c "import tomllib"'
-subprocess.run([engine, 'run', '--rm', '--network', 'none', '--memory', '256m', '--env', 'PATH=/opt/s263-rust/bin:/usr/local/bin:/usr/bin:/bin', image, 'bash', '-c', probe], check=True)
+probe = '''for t in bash python3 git clang gcc nm objdump taskset; do command -v "$t" >/dev/null || exit 1; done
+python3 -c "import tomllib"
+python3 - <<'PY'
+import os,tempfile
+p='/work/notes/s263-evidence'
+try:
+ fd,name=tempfile.mkstemp(prefix='preflight-',dir=p)
+ os.close(fd)
+ os.unlink(name)
+except OSError:
+ print('REFUSED taskset-translator-log-unwritable path='+p,flush=True)
+ raise SystemExit(75)
+print('PASS translator log directory',flush=True)
+PY
+'''
+result = subprocess.run([engine, 'run', '--rm', '--network', 'none', '--memory', '256m', '--env', 'PATH=/opt/s263-rust/bin:/usr/local/bin:/usr/bin:/bin', image, 'bash', '-c', probe])
+if result.returncode:
+    raise SystemExit(75 if result.returncode == 75 else result.returncode)
 print('PASS standalone preflight: clean snapshot, disk/memory floors, binary/image pins and tools; no take run', flush=True)
