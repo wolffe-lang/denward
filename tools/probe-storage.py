@@ -34,6 +34,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--image', type=Path, required=True)
     ap.add_argument('--workspace', type=Path, required=True)
+    ap.add_argument('--preflight', action='store_true')
     a = ap.parse_args()
     if not (Path('/.dockerenv').exists() or Path('/run/.containerenv').exists()) or {n for _, n in socket.if_nameindex()} != {'lo'}:
         raise RuntimeError('isolated container with loopback-only network required')
@@ -47,6 +48,13 @@ def main():
     p = a.workspace.resolve()
     if not re.fullmatch(r'[/A-Za-z0-9_.-]+', str(p)) or len(str(p / 'qmp.sock').encode()) > 100:
         raise RuntimeError('probe workspace needs a short shell-safe absolute path')
+    if p.exists():
+        raise RuntimeError('probe workspace must be new')
+    if not os.access('/dev/kvm', os.R_OK | os.W_OK):
+        raise RuntimeError('KVM device unavailable')
+    if a.preflight:
+        print('PASS P00-preflight only; no QEMU result claimed', flush=True)
+        return 0
     p.mkdir(parents=True, mode=0o700, exist_ok=False)
     (p / 'scratch').mkdir()
     os.environ['TMPDIR'] = str(p / 'scratch')

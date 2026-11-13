@@ -31,7 +31,7 @@ python3 tools/gate.py --suite native
 
 `core` checks specifications, pins, publication boundaries, fixtures and the gate's own failure witnesses without a compiler. `native` builds the refusal shell with the pinned compiler and runs CLI end-to-end rows in an isolated temporary fixture directory. Every row names its outcome; missing required tools fail rather than pass as skipped work. PAX storage capability rows are opt-in and require an explicitly supplied, digest-pinned test ISO, an isolated Linux runner and throwaway images. They never inspect an installed machine.
 
-The first hosted PR must exercise the workflow and its deliberate failing witness. Until a remote exists, hosted CI is unrun, not implicitly green. macOS native execution and macOS's actual SSH receiver remain release gates; a Linux build is not their substitute.
+The first hosted PR must exercise the workflow and its deliberate failing witness. A workflow that has not executed is unrun, not implicitly green. The refusal command has a 53-row CLI end-to-end matrix and separate pure-validation units. Native macOS/Linux execution and macOS's actual SSH receiver are distinct gates; a command build is not a receiver implementation.
 
 Contributing rules and the clean-room boundary are in [CONTRIBUTING](CONTRIBUTING.md). No production credentials or personal data belong in fixtures.
 
