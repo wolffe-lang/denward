@@ -4,7 +4,9 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import sys
 
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('division_gate', ROOT / 'tools/division-gate.py')
 gate = importlib.util.module_from_spec(spec)
