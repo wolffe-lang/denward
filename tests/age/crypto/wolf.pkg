@@ -1,0 +1,9 @@
+pkg {
+    name: "wolffe-lang/denward-age-crypto-rows",
+    version: "0.0.0",
+    edition: "1",
+    capabilities: [env],
+    deps: {
+        age: { path: "../../../src/age" },
+    },
+}

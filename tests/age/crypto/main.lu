@@ -1,0 +1,55 @@
+// Public RFC/age test keys only. No identities, keys or random samples printed.
+use age
+use std.bytes
+use std.x.crypto.curve25519
+
+fn main() -> !int {
+    var a = List[byte]()
+    var b = List[byte]()
+    for _ in 0..32 { (mut a).push(66 as byte); (mut b).push(67 as byte) }
+    let ra = curve25519.x25519_base(a)
+    let rb = curve25519.x25519_base(b)
+    let created = age.create_header([ra, rb])?
+    let parsed = age.parse_header(created.raw)?
+    let fa = age.open_header(parsed, [a])?
+    let fb = age.open_header(parsed, [b])?
+    assert(bytes.is_equal_fixed_work(fa, created.file_key))
+    assert(bytes.is_equal_fixed_work(fb, created.file_key))
+    assert(created.payload_nonce.len == 16)
+    for i in 0..32 {
+        var bad = copy parsed
+        bad.tag[i] = ((bad.tag[i] as int + 1) % 256) as byte
+        var refused = false
+        let out = age.open_header(bad, [a]) else |hmac| { refused = true; List[byte]() }
+        assert(refused && out.len == 0)
+    }
+    print("PASS header-mac-positions")
+    var wrong = List[byte]()
+    for _ in 0..32 { (mut wrong).push(68 as byte) }
+    var refused = false
+    let ignored = age.open_header(parsed, [wrong]) else |no_match| { refused = true; List[byte]() }
+    assert(refused && ignored.len == 0)
+    var zero = List[byte]()
+    for _ in 0..32 { (mut zero).push(0 as byte) }
+    var poisoned = copy parsed
+    (mut poisoned.stanzas).push(age.Stanza { share: zero, body: parsed.stanzas[0].body })
+    refused = false
+    let blocked = age.open_header(poisoned, [a]) else |header| { refused = true; List[byte]() }
+    assert(refused && blocked.len == 0)
+    print("PASS wrap-or-recovery")
+    var counter = List[byte]()
+    for _ in 0..11 { (mut counter).push(0 as byte) }
+    for i in 0..11 {
+        var c = copy counter
+        for j in i + 1..11 { c[j] = 255 as byte }
+        let next = age.next_counter(c)?
+        assert(next[i] == 1 as byte)
+        for j in i + 1..11 { assert(next[j] == 0 as byte) }
+    }
+    for i in 0..11 { counter[i] = 255 as byte }
+    var overflow = false
+    let absent = age.next_counter(counter) else |budget| { overflow = true; List[byte]() }
+    assert(overflow && absent.len == 0)
+    print("PASS counter-boundaries")
+    0
+}
