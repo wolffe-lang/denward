@@ -14,12 +14,12 @@ fn output(dir: str, name: str) -> int { fs_open_perm("{dir}/{name}", 20, 384) el
 
 fn size(fd: int) -> int { let s = fs_fstat_record(fd) else |_| { return -1 }; s[1] }
 
-fn source(dir: str) -> int {
-    let fd = output(dir, "source")
+fn source(dir: str, name: str) -> int {
+    let fd = output(dir, name)
     if fd < 0 { return -1 }
     fs_write_chunk(fd, [97 as byte, 98 as byte, 99 as byte]) else |_| { return -1 }
     fs_close(fd) else |_| { return -1 }
-    fs_open_mode("{dir}/source", 21) else |_| { -1 }
+    fs_open_mode("{dir}/{name}", 21) else |_| { -1 }
 }
 
 fn window(fd: int, n: int) -> payload.Stream { payload.Stream { fd, pos: 0, length: n, error: "" } }
@@ -145,7 +145,7 @@ fn unit(dir: str) -> int {
     }
     fs_close(alias_fd) else |_| { return 1 }
     let mismatch_fd = output(dir, "mismatch")
-    let mismatch_src = source(dir)
+    let mismatch_src = source(dir, "mismatch-source")
     var mismatch = archive.start(mismatch_fd, p)
     var mismatch_input = window(mismatch_src, 3)
     if !expect(
@@ -161,7 +161,7 @@ fn unit(dir: str) -> int {
     fs_close(mismatch_fd) else |_| { return 1 }
     fs_close(mismatch_src) else |_| { return 1 }
     let short_fd = output(dir, "short")
-    let short_src = source(dir)
+    let short_src = source(dir, "short-source")
     var short = archive.start(short_fd, p)
     var short_input = window(short_src, 4)
     if !expect(
@@ -176,7 +176,7 @@ fn unit(dir: str) -> int {
     fs_close(short_fd) else |_| { return 1 }
     fs_close(short_src) else |_| { return 1 }
     let io_fd = output(dir, "io")
-    let io_src = source(dir)
+    let io_src = source(dir, "io-source")
     fs_close(io_src) else |_| { return 1 }
     var io = archive.start(io_fd, p)
     var io_input = window(io_src, 3)
@@ -220,7 +220,7 @@ fn unit(dir: str) -> int {
     }
     fs_close(order_fd) else |_| { return 1 }
     let complete_fd = output(dir, "complete")
-    let complete_src = source(dir)
+    let complete_src = source(dir, "complete-source")
     var complete = archive.start(complete_fd, p)
     if prefix(mut complete) != "" { return 1 }
     var complete_input = window(complete_src, 3)
