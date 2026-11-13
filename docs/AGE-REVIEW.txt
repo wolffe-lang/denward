@@ -60,11 +60,16 @@ Required reading, in order
    tools/age-witness/linux.manifest, tools/age-witness/admission.manifest,
    tools/age-witness/engine.sh, tools/age-witness/step.sh,
    tools/age-witness/inner.sh, tools/age-witness/preflight.py,
+   tools/age-witness/affinity.py,
    tools/age-witness/mac.manifest, tools/age-witness/mac-step.sh,
    tools/age-witness/mac-step.py and tools/age-witness/oracle.sh.
    Match rig hashes, image identities, limits, every END and
    every unsupported/not-run row, not merely wrapper status or test counts.
    Read generated default/release objects/disassemblies on both targets.
+   Container affinity is read back after the unchanged translator and checked
+   against the held CPU mask; translator logs remain with the record. A
+   missing writable evidence mount or out-of-bound translated mask refuses
+   before any codec row, rather than becoming an implicit placement change.
 8. Reproduce a hostile-file row and both reference interoperability directions
    with independent expected outcomes, not the implementing author's verdict.
    Reference: age v1.3.2 Linux amd64 archive SHA-256
