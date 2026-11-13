@@ -48,11 +48,12 @@ fn prefix(mut w: archive.Writer) -> str {
     archive.directory(mut w, "objects")
 }
 
-fn emit(n: int, hash: str) -> int {
+fn emit(n: int, hash: str, chunk: int) -> int {
     if n < 0 || n > 34359738368 { return 2 }
     var p = payload.package_profile()
     p.max_entries = 16
     p.max_data_bytes = n
+    p.chunk_bytes = chunk
     var w = archive.start(1, p)
     var error = prefix(mut w)
     if error == "" {
@@ -256,10 +257,15 @@ fn unit(dir: str) -> int {
 fn main() -> int {
     let a = env_args()
     if a.len == 2 && a[0] == "unit" { return unit(a[1]) }
-    if a.len == 3 && a[0] == "emit" { return emit(payload.number(a[1].bytes(), 10), a[2]) }
-    if a.len == 2 && a[0] == "inspect" {
+    if (a.len == 3 || a.len == 4) && a[0] == "emit" {
+        var chunk = 65536
+        if a.len == 4 { chunk = payload.number(a[3].bytes(), 10) }
+        return emit(payload.number(a[1].bytes(), 10), a[2], chunk)
+    }
+    if (a.len == 2 || a.len == 3) && a[0] == "inspect" {
         var p = payload.package_profile()
         p.max_data_bytes = 34359738368
+        if a.len == 3 { p.chunk_bytes = payload.number(a[2].bytes(), 10) }
         var input = window(0, payload.number(a[1].bytes(), 10))
         let result = archive.inspect(mut input, p)
         if result.error != "" {
