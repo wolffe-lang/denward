@@ -56,7 +56,9 @@ def main():
         p = ROOT / name
         if not p.is_file():
             continue
-        text = p.read_text()
+        # Scan ASCII publication markers in binary fixtures as well as text;
+        # malformed UTF-8 must neither crash the gate nor hide those markers.
+        text = p.read_bytes().decode('utf-8', errors='replace')
         # Workstation paths and decision identifiers are not public contract data.
         if re.search(r'[/]Users[/]|[/]home[/][^\s]+[/]lanes[/]|R-[a-z][a-z0-9]*-[0-9]+', text):
             bad.append(name)
