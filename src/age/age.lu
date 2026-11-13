@@ -46,6 +46,8 @@ pub struct Header {
     count: int,
 }
 
+pub error HeaderErrors = {header, budget, unsupported}
+
 // Limit counts the LF as part of a raw line. Never copy an unbounded line.
 fn line_end(raw: List[byte], start: int, limit: int) -> int ! {header, budget} {
     var end = start
@@ -68,7 +70,7 @@ fn ascii(raw: List[byte], start: int, end: int) -> str ! {header} {
 /// Validate every supported stanza before any KDF/unwrap. Error values contain
 /// no raw input. Original bytes, never a re-encoded tree, are authenticated.
 /// Bounds are application admission, not universal age maxima.
-pub fn parse_header(raw: List[byte]) -> Header ! {header, budget, unsupported} {
+pub fn parse_header(raw: List[byte]) -> Header ! HeaderErrors {
     if raw.len > 1048576 { return budget }
     let first_end = line_end(raw, 0, 4096)?
     let first = ascii(raw, 0, first_end)?
