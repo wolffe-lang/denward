@@ -160,10 +160,10 @@ fn zeros(n: int) -> List[byte] {
     out
 }
 
-fn wrapping_key(share: List[byte], recipient: List[byte], shared: List[byte]) -> List[byte] {
+fn wrapping_key(share: List[byte], recipient: List[byte], agreement: List[byte]) -> List[byte] {
     var salt = copy share
     append(mut salt, recipient)
-    sha2.hkdf256(salt, shared, "age-encryption.org/v1/X25519".bytes(), 32)
+    sha2.hkdf256(salt, agreement, "age-encryption.org/v1/X25519".bytes(), 32)
 }
 
 fn header_tag(file_key: List[byte], transcript: List[byte]) -> List[byte] {
@@ -189,8 +189,8 @@ pub fn create_header(recipients: List[List[byte]]) -> Created ! CreationErrors {
         region stanza {
             let ephemeral = draws[32 + 32 * i..64 + 32 * i]
             let share = curve25519.x25519_base(ephemeral)
-            let shared = curve25519.x25519(ephemeral, recipients[i]) else |zero| { return key }
-            let wrap_key = wrapping_key(share, recipients[i], shared)
+            let agreement = curve25519.x25519(ephemeral, recipients[i]) else |zero| { return key }
+            let wrap_key = wrapping_key(share, recipients[i], agreement)
             let body = chacha20.seal(wrap_key, zeros(12), List[byte](), file_key)
             let line = "-> X25519 {base64.encode_raw(share)}\n{base64.encode_raw(body)}\n"
             append(mut raw, line.bytes())
@@ -222,8 +222,8 @@ pub fn open_header(parsed: Header, identities: List[List[byte]]) -> List[byte] !
         for stanza in parsed.stanzas {
             region attempt {
                 let recipient = curve25519.x25519_base(identity)
-                let shared = curve25519.x25519(identity, stanza.share) else |zero| { return header }
-                let wrap_key = wrapping_key(stanza.share, recipient, shared)
+                let agreement = curve25519.x25519(identity, stanza.share) else |zero| { return header }
+                let wrap_key = wrapping_key(stanza.share, recipient, agreement)
                 let candidate = chacha20.open(wrap_key, zeros(12), List[byte](), stanza.body) else |tag| { List[byte]() }
                 if candidate.len == 16 {
                     unwrapped = true
