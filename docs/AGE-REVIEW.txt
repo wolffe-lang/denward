@@ -78,6 +78,14 @@ payload key and counter. Each payload region holds only a bounded complete
 chunk/tag, candidate plaintext and write slices; successful partial writes
 release each slice in a nested region. Failure unwinds regions but cannot
 recall authenticated bytes already accepted by the caller's internal sink.
+In particular, a verified nonfinal chunk is released before later chunks are
+seen. Missing final authentication fails the whole stream, never succeeds.
+This matches the published vectors' expected authenticated prefixes; no
+unauthenticated byte is released. A caller must not act on a prefix. Restore
+is not implemented here: its future controller must complete archive preflight
+before target mutation, use private partial inodes for individual file writes,
+and publish them only after the required stream verification succeeds. That
+is not permission for a plaintext archive/cache spool, which remains forbidden.
 No descriptor is closed, no file synced/renamed, and no receipt published by
 the codec. Private partial cleanup and interruption/publication authority
 remain the future controller's responsibility.

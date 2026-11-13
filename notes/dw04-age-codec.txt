@@ -106,6 +106,33 @@ large vectors/streams, fuzz, RSS/lifetimes and the full gate stay on capped
 Linux. PAX creation refusal and entropy-independent decryption are demonstrated
 through a test seam; real PAX interoperability remains open for later work.
 
+Additional witness prediction, before any memory-path correction:
+- Test-only copies replace only the descriptor import and/or std random's
+  platform/provider seam, retaining production code and recording hashes.
+  PAX admission returns entropy_unqualified before any source/sink operation;
+  the same copied guard must not block deterministic published-file decrypt.
+  A modelled trapping provider emits no ciphertext and has no fallback.
+- Descriptor models exercise positive partial progress, successful zero
+  progress, I/O failure and interrupted-operation failure before/after progress.
+  These model the public descriptor interface, not kernel EINTR or signal
+  delivery. Failure never becomes whole-stream publication; an authenticated
+  nonfinal prefix may exist and remains unusable as restoration authority.
+- Private signed accounting accepts max-1+1, refuses max+1 and negatives, and
+  leaves the production 88-bit counter width unchanged.
+- Exact argument-line sizes 4095/4096/4097 (including LF), stanza and identity
+  counts 63/64/65, and raw headers 1048575/1048576/1048577 test admission edges.
+  Below/at-cap headers must parse and authenticate within the process cap;
+  above-cap input must return budget before unwrap. Header HMAC uses a
+  published test file key and unchanged published payload, not a new cipher.
+  Inspection found std raw-base64's per-character alphabet.bytes() allocation:
+  concatenating a maximum-size unknown body may retain too much temporary
+  memory. Measure that row red before a consumer-side lifetime correction;
+  do not alter std or lower the approved header bound silently.
+- Parser mutations use fixed seeds 0x44573034, 0x137173 and 0x8439, bounded
+  input/output/CPU/address space, a grammar oracle from the specification, and
+  retained bounded-minimization counterexamples. Coverage names grammar,
+  outcome and mutation categories, not unmeasured statement/branch coverage.
+
 Evidence index
 
 Development checkpoint at 2425c81: macOS default and release key/header/crypto
