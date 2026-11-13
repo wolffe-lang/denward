@@ -13,9 +13,12 @@ pub struct File {
     calls: int,
 }
 
+/// Explicit EOF is distinct from a modelled terminal/interrupted I/O failure.
+pub error ReadErrors = {eof, io}
+
 /// Read at most max/read_max bytes, or explicit EOF/io. Faults can follow
 /// partial progress; a zero-success event deliberately violates progress.
-pub fn read_into(mut f: File, mut buf: List[byte], max: int) -> int ! {eof, io} {
+pub fn read_into(mut f: File, mut buf: List[byte], max: int) -> int ! ReadErrors {
     f.calls += 1
     if f.event != 0 && f.at >= f.event_at {
         if f.event == 1 { (mut buf).reset(); return 0 }

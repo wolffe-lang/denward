@@ -113,9 +113,19 @@ def main():
     # driver is launched by a fresh small Python parent below.
     for size in [1048575, 1048576, 1048577]:
         header = exact_header(prefix, size)
-        row = run(a.parser, header)
-        good = row.stdout == (b'parsed\n' if size <= 1048576 else b'budget\n') and row.returncode == (0 if size <= 1048576 else 1) and not row.stderr
-        print(('PASS ' if good else 'FAIL ') + 'raw-header-boundary/' + str(size), flush=True)
+        raw_fixture = a.workspace / ('header-' + str(size) + '.bin')
+        raw_fixture.write_bytes(header)
+        command = ['python3', '-I', str(ROOT / 'tests/age/measure-child.py'), '--program', str(a.parser), '--ciphertext', str(raw_fixture), '--mode', 'parser', '--expected', 'parsed' if size <= 1048576 else 'budget']
+        measured = subprocess.run(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        if not measured.stdout:
+            print('FAIL raw-header-measurement/' + str(size), flush=True)
+            return 1
+        result = json.loads(measured.stdout)
+        result['header_bytes'] = size
+        results.append(result)
+        (a.workspace / 'memory.json').write_text(json.dumps(results, indent=2) + '\n')
+        good = measured.returncode == 0
+        print(('PASS ' if good else 'FAIL ') + 'raw-header-boundary/' + str(size) + ' child_peak_upper_kib=' + str(result['child_peak_upper_kib']) + ' exit=' + str(result['returncode']), flush=True)
         if not good:
             return 1
         sealed = run(binary, header)
@@ -128,13 +138,17 @@ def main():
         # hashes stdout while never storing plaintext on disk.
         command = [os.environ.get('PYTHON', 'python3'), '-I', str(ROOT / 'tests/age/measure-child.py'), '--program', str(a.program), '--identity', str(key), '--ciphertext', str(fixture), '--expected', fields['payload'] if size <= 1048576 else 'budget']
         measured = subprocess.run(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
-        if measured.returncode:
-            print('FAIL worst-header-hmac-memory/' + str(size), flush=True)
+        if not measured.stdout:
+            print('FAIL worst-header-measurement/' + str(size), flush=True)
             return 1
         result = json.loads(measured.stdout)
         result['header_bytes'] = size
         results.append(result)
-        print('PASS worst-header-hmac-memory/' + str(size) + ' parent_floor_kib=' + str(result['parent_floor_kib']) + ' child_peak_upper_kib=' + str(result['child_peak_upper_kib']), flush=True)
+        (a.workspace / 'memory.json').write_text(json.dumps(results, indent=2) + '\n')
+        good = measured.returncode == 0
+        print(('PASS ' if good else 'FAIL ') + 'worst-header-hmac-memory/' + str(size) + ' parent_floor_kib=' + str(result['parent_floor_kib']) + ' child_peak_upper_kib=' + str(result['child_peak_upper_kib']) + ' exit=' + str(result['returncode']), flush=True)
+        if not good:
+            return 1
     (a.workspace / 'memory.json').write_text(json.dumps(results, indent=2) + '\n')
     key.unlink()
     return 0
