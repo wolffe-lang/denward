@@ -4,8 +4,10 @@ use packing
 use payload
 use std.x.crypto.sha2 as sha2
 
+/// Exact physical path, declared byte length and externally supplied data digest.
 pub struct Member { path: str, length: int, sha256: str }
 
+/// Borrowed core session with adapter-owned first-error storage.
 pub struct Writer { core: packing.Writer, reason: List[byte] }
 
 fn digest(s: str) -> bool {
@@ -45,6 +47,7 @@ pub fn start(fd: int, profile: payload.Profile) -> Writer {
     Writer { core: packing.writer_start(fd, profile), reason: List[byte]() }
 }
 
+/// Observe the first safe adapter/core reason without exposing source data.
 pub fn error(w: Writer) -> str {
     if w.reason.len > 0 { return str_from_utf8(w.reason) else |_| { "archive-state" } }
     packing.writer_error(w.core)
@@ -165,6 +168,7 @@ pub fn finish(mut w: Writer) -> str {
     packing.writer_finish(mut w.core)
 }
 
+/// Permanently cancel without closing handles or completing physical framing.
 pub fn abort(mut w: Writer) -> str { fail(mut w, "archive-aborted") }
 
 /// The only success claim here is complete physical inventory validation.

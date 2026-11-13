@@ -4,7 +4,7 @@ use payload
 fn main() -> int {
     let p = payload.package_profile()
     let w = archive.start(-1, p)
-    if archive.error(w) != "writer-fd" { eprintln("FAIL A01-invalid-borrowed-handle"); return 1 }
-    println("PASS A01-invalid-borrowed-handle")
+    if archive.error(w) != "writer-fd" { eprint("FAIL A01-invalid-borrowed-handle\n"); return 1 }
+    print("PASS A01-invalid-borrowed-handle\n")
     0
 }
