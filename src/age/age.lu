@@ -84,7 +84,9 @@ pub fn parse_header(raw: List[byte]) -> Header ! HeaderErrors {
     let first = ascii(raw, 0, first_end)?
     if first != "age-encryption.org/v1" {
         if text.starts_with(first, "age-encryption.org/") ||
-            first == "-----BEGIN AGE ENCRYPTED FILE-----" { return unsupported }
+            first == "-----BEGIN AGE ENCRYPTED FILE-----" {
+            return unsupported
+        }
         return header
     }
     var at = first_end + 1
@@ -95,8 +97,12 @@ pub fn parse_header(raw: List[byte]) -> Header ! HeaderErrors {
         let end = line_end(raw, at, 4096)?
         let line = ascii(raw, at, end)?
         if text.starts_with(line, "---") {
-            if count == 0 || line.len != 47 || !text.starts_with(line, "--- ") ||
-                end + 1 != raw.len { return header }
+            if count == 0 ||
+                line.len != 47 ||
+                !text.starts_with(line, "--- ") ||
+                end + 1 != raw.len {
+                return header
+            }
             let tag = base64.decode_raw(line[4..line.len]) else |parse| { return header }
             if tag.len != 32 { return header }
             return Header {
@@ -223,9 +229,16 @@ pub fn open_header(parsed: Header, identities: List[List[byte]]) -> List[byte] !
         for stanza in parsed.stanzas {
             region attempt {
                 let recipient = curve25519.x25519_base(identity)
-                let agreement = curve25519.x25519(identity, stanza.share) else |zero| { return header }
+                let agreement = curve25519.x25519(identity, stanza.share) else |zero| {
+                    return header
+                }
                 let wrap_key = wrapping_key(stanza.share, recipient, agreement)
-                let candidate = chacha20.open(wrap_key, zeros(12), List[byte](), stanza.body) else |tag| { List[byte]() }
+                let candidate = chacha20.open(
+                    wrap_key,
+                    zeros(12),
+                    List[byte](),
+                    stanza.body,
+                ) else |tag| { List[byte]() }
                 if candidate.len == 16 {
                     unwrapped = true
                     let want = header_tag(candidate, parsed.transcript)
@@ -269,7 +282,18 @@ fn advance_counter(mut counter: List[byte]) -> () ! {budget} {
 /// I/O/zero progress, or entropy_unqualified. No outcome carries secret input.
 /// OS-random provider traps are NOT caught or renamed. An error is never a
 /// complete backup; an authenticated prefix may already have reached the sink.
-pub error StreamErrors = {key, header, budget, unsupported, no_match, hmac, tag, truncated, io, entropy_unqualified}
+pub error StreamErrors = {
+    key,
+    header,
+    budget,
+    unsupported,
+    no_match,
+    hmac,
+    tag,
+    truncated,
+    io,
+    entropy_unqualified,
+}
 
 fn add_count(total: int, n: int) -> int ! {budget} {
     if total < 0 || n < 0 || total > 9223372036854775807 - n { return budget }
@@ -317,8 +341,10 @@ fn read_header(mut source: fs.File) -> Header ! StreamErrors {
         if n != 1 { return io }
         (mut raw).push(one[0])
         if one[0] == 10 as byte {
-            if raw.len - start >= 4 && raw[start] == 45 as byte &&
-                raw[start + 1] == 45 as byte && raw[start + 2] == 45 as byte {
+            if raw.len - start >= 4 &&
+                raw[start] == 45 as byte &&
+                raw[start + 1] == 45 as byte &&
+                raw[start + 2] == 45 as byte {
                 return parse_header(raw)?
             }
             start = raw.len
@@ -338,7 +364,11 @@ fn stream_nonce(counter: List[byte], final: bool) -> List[byte] {
 /// closing, syncing or publishing files. Return the complete plaintext count
 /// only after the authenticated final chunk is written. Caller owns abort and
 /// private partial cleanup on every error/interruption. No entropy injection.
-pub fn encrypt(mut source: fs.File, mut sink: fs.File, recipients: List[List[byte]]) -> int ! StreamErrors {
+pub fn encrypt(
+    mut source: fs.File,
+    mut sink: fs.File,
+    recipients: List[List[byte]],
+) -> int ! StreamErrors {
     let created = create_header(recipients)?
     let payload_key = sha2.hkdf256(created.payload_nonce, created.file_key, "payload".bytes(), 32)
     write_all(mut sink, created.raw)?
@@ -360,7 +390,12 @@ pub fn encrypt(mut source: fs.File, mut sink: fs.File, recipients: List[List[byt
             }
             in_count = add_count(in_count, plain.len)?
             out_count = add_count(out_count, plain.len + 16)?
-            let boxed = chacha20.seal(payload_key, stream_nonce(counter, final), List[byte](), plain)
+            let boxed = chacha20.seal(
+                payload_key,
+                stream_nonce(counter, final),
+                List[byte](),
+                plain,
+            )
             write_all(mut sink, boxed)?
             if final { return in_count }
             advance_counter(mut counter)?
@@ -374,7 +409,11 @@ pub fn encrypt(mut source: fs.File, mut sink: fs.File, recipients: List[List[byt
 /// plaintext. Decryption has no entropy prerequisite. Require final AEAD plus
 /// immediate EOF, rejecting appended bytes/second files. The caller's sink is
 /// an internal verification sink, never authority to mutate a restore target.
-pub fn decrypt(mut source: fs.File, mut sink: fs.File, identities: List[List[byte]]) -> int ! StreamErrors {
+pub fn decrypt(
+    mut source: fs.File,
+    mut sink: fs.File,
+    identities: List[List[byte]],
+) -> int ! StreamErrors {
     let parsed = read_header(mut source)?
     let file_key = open_header(parsed, identities)?
     var payload_nonce = List[byte]()
@@ -396,13 +435,23 @@ pub fn decrypt(mut source: fs.File, mut sink: fs.File, identities: List[List[byt
             var final = ended
             var plain = List[byte]()
             if !final {
-                plain = chacha20.open(payload_key, stream_nonce(counter, false), List[byte](), boxed) else |tag| {
+                plain = chacha20.open(
+                    payload_key,
+                    stream_nonce(counter, false),
+                    List[byte](),
+                    boxed,
+                ) else |tag| {
                     final = true
                     List[byte]()
                 }
             }
             if final {
-                plain = chacha20.open(payload_key, stream_nonce(counter, true), List[byte](), boxed)?
+                plain = chacha20.open(
+                    payload_key,
+                    stream_nonce(counter, true),
+                    List[byte](),
+                    boxed,
+                )?
             }
             out_count = add_count(out_count, plain.len)?
             write_all(mut sink, plain)?

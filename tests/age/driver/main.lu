@@ -1,5 +1,6 @@
 //! Test-only binary stream driver, never installed and never a backup command.
 //! Key input is a private file, never argv contents or an environment value.
+
 use age
 use std.fs
 use std.str as text
@@ -35,7 +36,7 @@ fn key_file(path: str, secret: bool) -> List[List[byte]] ! KeyInputErrors {
 
 fn main() -> int {
     let args = env_args()
-    if args.len != 2 || (args[0] != "decrypt" && args[0] != "encrypt") {
+    if args.len != 2 || args[0] != "decrypt" && args[0] != "encrypt" {
         eprint("ERROR usage")
         return 2
     }

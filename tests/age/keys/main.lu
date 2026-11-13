@@ -1,8 +1,8 @@
-// Published age specification key examples: public test material only.
-use age
 use std.bech32
 use std.bytes
 use std.str as text
+// Published age specification key examples: public test material only.
+use age
 
 fn rejected(s: str, secret: bool) -> bool {
     if secret {

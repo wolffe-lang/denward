@@ -1,6 +1,6 @@
-use age
 use std.base64
 use std.str as text
+use age
 
 fn bad(s: str) -> bool {
     let parsed = age.parse_header(s.bytes()) else |_| { return true }
@@ -23,9 +23,13 @@ fn main() -> !int {
     assert(mixed.stanzas.len == 1 && mixed.count == 2)
     assert((str_from_utf8(mixed.transcript) else "") == "{version}{unknown}{stanza}---")
     for s in [
-        "", "{version}--- {mac}\n", "{version}{stanza}--- {mac}",
-        "{version}{stanza}--- {mac}\nextra", "{version}{stanza}---  {mac}\n",
-        "{version}{stanza}--- {mac}=\n", "{version}{stanza}--- {mac} \n",
+        "",
+        "{version}--- {mac}\n",
+        "{version}{stanza}--- {mac}",
+        "{version}{stanza}--- {mac}\nextra",
+        "{version}{stanza}---  {mac}\n",
+        "{version}{stanza}--- {mac}=\n",
+        "{version}{stanza}--- {mac} \n",
         "{version}-> X25519\n{body}\n--- {mac}\n",
         "{version}-> X25519 {share} extra\n{body}\n--- {mac}\n",
         "{version}-> X25519 {share}=\n{body}\n--- {mac}\n",
@@ -44,7 +48,9 @@ fn main() -> !int {
         "{version}{stanza}-> X25519 {share} extra\n{body}\n--- {mac}\n",
         "{version}{stanza}-> scrypt salt 18\n{body}\n--- {mac}\n",
     ] { assert(bad(s)) }
-    let empty_last = age.parse_header("{version}-> unknown\n{text.repeat("A", 64)}\n\n--- {mac}\n".bytes())?
+    let empty_last = age.parse_header(
+        "{version}-> unknown\n{text.repeat("A", 64)}\n\n--- {mac}\n".bytes(),
+    )?
     assert(empty_last.count == 1)
     let only_scrypt = age.parse_header("{version}-> scrypt salt 18\n{body}\n--- {mac}\n".bytes())?
     assert(only_scrypt.count == 1 && only_scrypt.stanzas.len == 0)

@@ -1,7 +1,7 @@
-// Public RFC/age test keys only. No identities, keys or random samples printed.
-use age
 use std.bytes
 use std.x.crypto.curve25519
+// Public RFC/age test keys only. No identities, keys or random samples printed.
+use age
 
 fn main() -> !int {
     var a = List[byte]()
@@ -20,21 +20,39 @@ fn main() -> !int {
         var bad = copy parsed
         bad.tag[i] = ((bad.tag[i] as int + 1) % 256) as byte
         var refused = false
-        let out = age.open_header(bad, [copy a]) else |e| { refused = match e { hmac => true, _ => false }; List[byte]() }
+        let out = age.open_header(bad, [copy a]) else |e| {
+            refused = match e {
+                hmac => true,
+                _ => false,
+            }
+            List[byte]()
+        }
         assert(refused && out.len == 0)
     }
     print("PASS header-mac-positions")
     var wrong = List[byte]()
     for _ in 0..32 { (mut wrong).push(68 as byte) }
     var refused = false
-    let ignored = age.open_header(parsed, [wrong]) else |e| { refused = match e { no_match => true, _ => false }; List[byte]() }
+    let ignored = age.open_header(parsed, [wrong]) else |e| {
+        refused = match e {
+            no_match => true,
+            _ => false,
+        }
+        List[byte]()
+    }
     assert(refused && ignored.len == 0)
     var zero = List[byte]()
     for _ in 0..32 { (mut zero).push(0 as byte) }
     var poisoned = copy parsed
     (mut poisoned.stanzas).push(age.Stanza { share: zero, body: parsed.stanzas[0].body })
     refused = false
-    let blocked = age.open_header(poisoned, [copy a]) else |e| { refused = match e { header => true, _ => false }; List[byte]() }
+    let blocked = age.open_header(poisoned, [copy a]) else |e| {
+        refused = match e {
+            header => true,
+            _ => false,
+        }
+        List[byte]()
+    }
     assert(refused && blocked.len == 0)
     print("PASS wrap-or-recovery")
     var counter = List[byte]()
