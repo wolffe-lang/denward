@@ -3,6 +3,7 @@
 //! Key codecs are deliberately owned by std; never render secret inputs.
 
 use std.bech32
+use std.base64
 use std.str as text
 
 /// Exact native X25519 recipient, one case, BIP-173 and canonical 32 bytes.
@@ -27,4 +28,99 @@ pub fn identity_text(b: List[byte]) -> str ! {key} {
     if b.len != 32 { return key }
     let encoded = bech32.encode_bytes("age-secret-key-", b) else |parse| { return key }
     text.upper(encoded)
+}
+
+/// Structurally validated X25519 stanza. Not an authenticated recipient.
+pub struct Stanza {
+    share: List[byte],
+    body: List[byte],
+}
+
+/// Original MAC transcript and decoded tag. Unknown stanzas are included
+/// verbatim in transcript, but never executed. count includes unknown types.
+/// Parsed syntax is NOT header authentication or a backup-verification claim.
+pub struct Header {
+    transcript: List[byte],
+    tag: List[byte],
+    stanzas: List[Stanza],
+    count: int,
+}
+
+// Limit counts the LF as part of a raw line. Never copy an unbounded line.
+fn line_end(raw: List[byte], start: int, limit: int) -> int ! {header, budget} {
+    var end = start
+    while end < raw.len {
+        if end - start >= limit { return budget }
+        if raw[end] == 10 as byte { return end }
+        end += 1
+    }
+    header
+}
+
+fn ascii(raw: List[byte], start: int, end: int) -> str ! {header} {
+    for i in start..end {
+        if raw[i] < 32 as byte || raw[i] > 126 as byte { return header }
+    }
+    str_from_utf8(raw[start..end]) else |_| { return header }
+}
+
+/// Parse exactly one raw header, including the last LF and no payload.
+/// Validate every supported stanza before any KDF/unwrap. Error values contain
+/// no raw input. Original bytes, never a re-encoded tree, are authenticated.
+/// Bounds are application admission, not universal age maxima.
+pub fn parse_header(raw: List[byte]) -> Header ! {header, budget, unsupported} {
+    if raw.len > 1048576 { return budget }
+    let first_end = line_end(raw, 0, 4096)?
+    let first = ascii(raw, 0, first_end)?
+    if first != "age-encryption.org/v1" {
+        if text.starts_with(first, "age-encryption.org/") ||
+            first == "-----BEGIN AGE ENCRYPTED FILE-----" { return unsupported }
+        return header
+    }
+    var at = first_end + 1
+    var stanzas = List[Stanza]()
+    var count = 0
+    var scrypt_seen = false
+    while at < raw.len {
+        let end = line_end(raw, at, 4096)?
+        let line = ascii(raw, at, end)?
+        if text.starts_with(line, "---") {
+            if count == 0 || line.len != 47 || !text.starts_with(line, "--- ") ||
+                end + 1 != raw.len { return header }
+            let tag = base64.decode_raw(line[4..line.len]) else |parse| { return header }
+            if tag.len != 32 { return header }
+            return Header {
+                transcript: raw[0..at + 3],
+                tag: tag,
+                stanzas: stanzas,
+                count: count,
+            }
+        }
+        if !text.starts_with(line, "-> ") || line.len < 4 { return header }
+        if line[line.len - 1..line.len] == " " || text.contains(line, "  ") { return header }
+        let args = text.split(line[3..line.len], " ")
+        count += 1
+        if count > 64 { return budget }
+        if args[0] == "scrypt" { scrypt_seen = true }
+        if scrypt_seen && count > 1 { return header }
+        at = end + 1
+        var encoded = List[byte]()
+        var final_line = false
+        while !final_line {
+            let body_end = line_end(raw, at, 65) else |_| { return header }
+            let columns = body_end - at
+            for i in at..body_end { (mut encoded).push(raw[i]) }
+            final_line = columns < 64
+            at = body_end + 1
+        }
+        let body_text = str_from_utf8(encoded) else |_| { return header }
+        let body = base64.decode_raw(body_text) else |parse| { return header }
+        if args[0] == "X25519" {
+            if args.len != 2 || body.len != 32 { return header }
+            let share = base64.decode_raw(args[1]) else |parse| { return header }
+            if share.len != 32 { return header }
+            (mut stanzas).push(Stanza { share: share, body: body })
+        }
+    }
+    header
 }
