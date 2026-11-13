@@ -2,13 +2,18 @@ use archive
 use payload
 
 fn empty_hash() -> str { "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }
+
 fn abc_hash() -> str { "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" }
+
 fn expect(ok: bool, name: str) -> bool {
     if ok { print("PASS {name}\n") } else { eprint("FAIL {name}\n") }
     ok
 }
+
 fn output(dir: str, name: str) -> int { fs_open_perm("{dir}/{name}", 20, 384) else |_| { -1 } }
+
 fn size(fd: int) -> int { let s = fs_fstat_record(fd) else |_| { return -1 }; s[1] }
+
 fn source(dir: str) -> int {
     let fd = output(dir, "source")
     if fd < 0 { return -1 }
@@ -16,18 +21,33 @@ fn source(dir: str) -> int {
     fs_close(fd) else |_| { return -1 }
     fs_open_mode("{dir}/source", 21) else |_| { -1 }
 }
+
 fn window(fd: int, n: int) -> payload.Stream { payload.Stream { fd, pos: 0, length: n, error: "" } }
-fn member(hash: str, n: int) -> archive.Member { archive.Member { path: "objects/{hash}", length: n, sha256: copy hash } }
+
+fn member(hash: str, n: int) -> archive.Member {
+    archive.Member { path: "objects/{hash}", length: n, sha256: copy hash }
+}
+
 fn prefix(mut w: archive.Writer) -> str {
     let began = archive.directory(mut w, "control")
     if began != "" { return began }
-    for path in ["control/accounts", "control/config-defaults", "control/installed", "control/manifest"] {
+    for path in [
+        "control/accounts",
+        "control/config-defaults",
+        "control/installed",
+        "control/manifest",
+    ] {
         var input = window(0, 0)
-        let result = archive.file(mut w, archive.Member { path: copy path, length: 0, sha256: empty_hash() }, mut input)
+        let result = archive.file(
+            mut w,
+            archive.Member { path: copy path, length: 0, sha256: empty_hash() },
+            mut input,
+        )
         if result != "" { return result }
     }
     archive.directory(mut w, "objects")
 }
+
 fn emit(n: int, hash: str) -> int {
     if n < 0 || n > 34359738368 { return 2 }
     var p = payload.package_profile()
@@ -43,50 +63,116 @@ fn emit(n: int, hash: str) -> int {
     if error != "" { eprint("archive:{error}\n"); return 1 }
     0
 }
+
 fn unit(dir: str) -> int {
     let p = payload.package_profile()
     let bad = archive.start(-1, p)
     if !expect(archive.error(bad) == "writer-fd", "A01-invalid-borrowed-handle") { return 1 }
     let missing_fd = output(dir, "missing")
     var missing = archive.start(missing_fd, p)
-    if !expect(archive.finish(mut missing) == "archive-missing-control" && size(missing_fd) == 0 && archive.finish(mut missing) == "archive-missing-control", "A02-missing-controls-no-finish") { return 1 }
+    if !expect(
+        archive.finish(mut missing) == "archive-missing-control" &&
+            size(missing_fd) == 0 &&
+            archive.finish(mut missing) == "archive-missing-control",
+        "A02-missing-controls-no-finish",
+    ) {
+        return 1
+    }
     fs_close(missing_fd) else |_| { return 1 }
     let path_fd = output(dir, "path")
     var path = archive.start(path_fd, p)
-    if !expect(archive.directory(mut path, "home/secret") == "archive-member-name" && size(path_fd) == 0, "A03-unsafe-name-before-write") { return 1 }
+    if !expect(
+        archive.directory(mut path, "home/secret") == "archive-member-name" && size(path_fd) == 0,
+        "A03-unsafe-name-before-write",
+    ) {
+        return 1
+    }
     fs_close(path_fd) else |_| { return 1 }
     let name_fd = output(dir, "name")
     var name = archive.start(name_fd, p)
     var name_input = window(0, 0)
-    if !expect(archive.file(mut name, archive.Member { path: "objects/{abc_hash()}", length: 0, sha256: empty_hash() }, mut name_input) == "archive-object-name-digest" && size(name_fd) == 0, "A04-object-name-digest-before-write") { return 1 }
+    if !expect(
+        archive.file(
+            mut name,
+            archive.Member { path: "objects/{abc_hash()}", length: 0, sha256: empty_hash() },
+            mut name_input,
+        ) ==
+            "archive-object-name-digest" &&
+            size(name_fd) == 0,
+        "A04-object-name-digest-before-write",
+    ) {
+        return 1
+    }
     fs_close(name_fd) else |_| { return 1 }
     let hash_fd = output(dir, "hash")
     var hash = archive.start(hash_fd, p)
     var hash_input = window(0, 0)
-    if !expect(archive.file(mut hash, archive.Member { path: "control/manifest", length: 0, sha256: "not-a-digest" }, mut hash_input) == "archive-member-digest" && size(hash_fd) == 0, "A05-digest-syntax-before-write") { return 1 }
+    if !expect(
+        archive.file(
+            mut hash,
+            archive.Member { path: "control/manifest", length: 0, sha256: "not-a-digest" },
+            mut hash_input,
+        ) ==
+            "archive-member-digest" &&
+            size(hash_fd) == 0,
+        "A05-digest-syntax-before-write",
+    ) {
+        return 1
+    }
     fs_close(hash_fd) else |_| { return 1 }
     let window_fd = output(dir, "window")
     var wrong_window = archive.start(window_fd, p)
     var bad_input = window(0, 2)
-    if !expect(archive.file(mut wrong_window, member(abc_hash(), 3), mut bad_input) == "archive-source-window" && size(window_fd) == 0, "A06-source-window-before-write") { return 1 }
+    if !expect(
+        archive.file(mut wrong_window, member(abc_hash(), 3), mut bad_input) ==
+            "archive-source-window" &&
+            size(window_fd) == 0,
+        "A06-source-window-before-write",
+    ) {
+        return 1
+    }
     fs_close(window_fd) else |_| { return 1 }
     let alias_fd = output(dir, "alias")
     var alias = archive.start(alias_fd, p)
     var alias_input = window(alias_fd, 0)
-    if !expect(archive.file(mut alias, member(empty_hash(), 0), mut alias_input) == "archive-source-window" && size(alias_fd) == 0, "A07-source-sink-handle-alias") { return 1 }
+    if !expect(
+        archive.file(mut alias, member(empty_hash(), 0), mut alias_input) ==
+            "archive-source-window" &&
+            size(alias_fd) == 0,
+        "A07-source-sink-handle-alias",
+    ) {
+        return 1
+    }
     fs_close(alias_fd) else |_| { return 1 }
     let mismatch_fd = output(dir, "mismatch")
     let mismatch_src = source(dir)
     var mismatch = archive.start(mismatch_fd, p)
     var mismatch_input = window(mismatch_src, 3)
-    if !expect(archive.file(mut mismatch, member(empty_hash(), 3), mut mismatch_input) == "archive-object-digest" && archive.finish(mut mismatch) == "archive-object-digest" && size(mismatch_fd) == 515 && size(mismatch_src) == 3, "A08-source-digest-no-finish") { return 1 }
+    if !expect(
+        archive.file(mut mismatch, member(empty_hash(), 3), mut mismatch_input) ==
+            "archive-object-digest" &&
+            archive.finish(mut mismatch) == "archive-object-digest" &&
+            size(mismatch_fd) == 515 &&
+            size(mismatch_src) == 3,
+        "A08-source-digest-no-finish",
+    ) {
+        return 1
+    }
     fs_close(mismatch_fd) else |_| { return 1 }
     fs_close(mismatch_src) else |_| { return 1 }
     let short_fd = output(dir, "short")
     let short_src = source(dir)
     var short = archive.start(short_fd, p)
     var short_input = window(short_src, 4)
-    if !expect(archive.file(mut short, member(abc_hash(), 4), mut short_input) == "archive-source-truncated" && archive.finish(mut short) == "archive-source-truncated" && size(short_fd) == 515, "A09-source-truncated-no-finish") { return 1 }
+    if !expect(
+        archive.file(mut short, member(abc_hash(), 4), mut short_input) ==
+            "archive-source-truncated" &&
+            archive.finish(mut short) == "archive-source-truncated" &&
+            size(short_fd) == 515,
+        "A09-source-truncated-no-finish",
+    ) {
+        return 1
+    }
     fs_close(short_fd) else |_| { return 1 }
     fs_close(short_src) else |_| { return 1 }
     let io_fd = output(dir, "io")
@@ -94,20 +180,44 @@ fn unit(dir: str) -> int {
     fs_close(io_src) else |_| { return 1 }
     var io = archive.start(io_fd, p)
     var io_input = window(io_src, 3)
-    if !expect(archive.file(mut io, member(abc_hash(), 3), mut io_input) == "archive-source-io" && archive.finish(mut io) == "archive-source-io", "A10-source-io-latched") { return 1 }
+    if !expect(
+        archive.file(mut io, member(abc_hash(), 3), mut io_input) == "archive-source-io" &&
+            archive.finish(mut io) == "archive-source-io",
+        "A10-source-io-latched",
+    ) {
+        return 1
+    }
     fs_close(io_fd) else |_| { return 1 }
     let closed_fd = output(dir, "closed")
     fs_close(closed_fd) else |_| { return 1 }
     var closed = archive.start(closed_fd, p)
-    if !expect(archive.directory(mut closed, "control") == "pack-write" && archive.finish(mut closed) == "pack-write", "A11-sink-io-latched") { return 1 }
+    if !expect(
+        archive.directory(mut closed, "control") == "pack-write" &&
+            archive.finish(mut closed) == "pack-write",
+        "A11-sink-io-latched",
+    ) {
+        return 1
+    }
     let abort_fd = output(dir, "abort")
     var aborted = archive.start(abort_fd, p)
-    if !expect(archive.abort(mut aborted) == "archive-aborted" && archive.directory(mut aborted, "control") == "archive-aborted" && size(abort_fd) == 0, "A12-abort-no-finish") { return 1 }
+    if !expect(
+        archive.abort(mut aborted) == "archive-aborted" &&
+            archive.directory(mut aborted, "control") == "archive-aborted" &&
+            size(abort_fd) == 0,
+        "A12-abort-no-finish",
+    ) {
+        return 1
+    }
     fs_close(abort_fd) else |_| { return 1 }
     let order_fd = output(dir, "order")
     var order = archive.start(order_fd, p)
     if archive.directory(mut order, "objects") != "" { return 1 }
-    if !expect(archive.directory(mut order, "control") == "writer-order" && size(order_fd) == 512, "A13-order-latched") { return 1 }
+    if !expect(
+        archive.directory(mut order, "control") == "writer-order" && size(order_fd) == 512,
+        "A13-order-latched",
+    ) {
+        return 1
+    }
     fs_close(order_fd) else |_| { return 1 }
     let complete_fd = output(dir, "complete")
     let complete_src = source(dir)
@@ -115,18 +225,34 @@ fn unit(dir: str) -> int {
     if prefix(mut complete) != "" { return 1 }
     var complete_input = window(complete_src, 3)
     if archive.file(mut complete, member(abc_hash(), 3), mut complete_input) != "" { return 1 }
-    if !expect(archive.finish(mut complete) == "" && complete_input.pos == 3 && size(complete_src) == 3 && size(complete_fd) == 5120 && archive.finish(mut complete) == "writer-finished" && size(complete_fd) == 5120, "A14-exact-finish-and-borrowed-handles") { return 1 }
+    if !expect(
+        archive.finish(mut complete) == "" &&
+            complete_input.pos == 3 &&
+            size(complete_src) == 3 &&
+            size(complete_fd) == 5120 &&
+            archive.finish(mut complete) == "writer-finished" &&
+            size(complete_fd) == 5120,
+        "A14-exact-finish-and-borrowed-handles",
+    ) {
+        return 1
+    }
     fs_close(complete_fd) else |_| { return 1 }
     fs_close(complete_src) else |_| { return 1 }
     let cap_fd = output(dir, "cap")
     var cap_profile = payload.package_profile()
     cap_profile.max_entries = 0
     var cap = archive.start(cap_fd, cap_profile)
-    if !expect(archive.directory(mut cap, "control") == "entry-limit" && size(cap_fd) == 0, "A15-explicit-entry-cap") { return 1 }
+    if !expect(
+        archive.directory(mut cap, "control") == "entry-limit" && size(cap_fd) == 0,
+        "A15-explicit-entry-cap",
+    ) {
+        return 1
+    }
     fs_close(cap_fd) else |_| { return 1 }
     print("PASS archive-adapter-unit\n")
     0
 }
+
 fn main() -> int {
     let a = env_args()
     if a.len == 2 && a[0] == "unit" { return unit(a[1]) }
@@ -136,7 +262,11 @@ fn main() -> int {
         p.max_data_bytes = 34359738368
         var input = window(0, payload.number(a[1]))
         let result = archive.inspect(mut input, p)
-        if result.error != "" { print("refused:{result.error}\n") } else { print("physical:{result.entries.len}\n") }
+        if result.error != "" {
+            print("refused:{result.error}\n")
+        } else {
+            print("physical:{result.entries.len}\n")
+        }
         return 0
     }
     2
