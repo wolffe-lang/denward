@@ -44,6 +44,8 @@ def main():
     step('archive-pin', [sys.executable, '-I', str(ROOT / 'tools/check-archive-pin.py')], env)
     step('archive-pin-mutations', [sys.executable, '-I', str(ROOT / 'tests/archive-pin.py')], env)
     step('storage-judge-replay', [sys.executable, '-I', str(ROOT / 'tests/qemu/assertions.py'), str(ROOT / 'tests/qemu/observed-v1.json'), '--mode', 'judge-replay'], env)
+    step('public-text-self-test', [sys.executable, '-I', str(ROOT / 'tools/check-public-text'), '--self-test'], env)
+    step('public-text', [sys.executable, '-I', str(ROOT / 'tools/check-public-text')], env)
     if a.suite == 'core':
         return
     machine = platform.machine().lower()
