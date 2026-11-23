@@ -4,6 +4,7 @@
     python3 -I tools/check-public-text                     the gate
     python3 -I tools/check-public-text --self-test         the check's own cases; reads no repository file
     python3 -I tools/check-public-text --against-rev REV   the gate, and the baseline holds no more than REV's
+    python3 -I tools/check-public-text --against-event     the same, REV from the CI event (GITHUB_EVENT_NAME)
     python3 -I tools/check-public-text --shrink            lower the baseline to the tree; never raises it
     python3 -I tools/check-public-text --init              write the first baseline
     python3 -I tools/check-public-text --report [--all]    every hit, for cleaning; --all adds excluded files
@@ -25,7 +26,12 @@ and word, the word as the first twelve hex digits of its digest, with its count.
 holds more of a word than the baseline counts, or a word the baseline lacks; it notes where the file holds
 fewer. --shrink rewrites the baseline down to the tree after a cleanup and refuses while anything is over.
 --against-rev REV fails when the baseline's total for any word is above REV's, or names a word REV's lacks:
-the baseline may only shrink (an entry may move with its text from file to file).
+the baseline may only shrink (an entry may move with its text from file to file). --against-event takes REV
+from the event CI runs for (GITHUB_EVENT_NAME, GITHUB_EVENT_PATH): for a pull request the base tip, the first
+parent of the merge commit its checkout makes (a head that is no merge commit is refused); for a push the
+push's previous tip, `before`, which the workflow fetches, so every commit of a push of several is held to
+it. A push that made its branch has no previous tip: its baseline must then be empty. An all-zero REV means
+the same for --against-rev.
 
 tools/public-text.conf holds this repository's own lines:
     tool SHA256            this file's digest; a copy that differs from it fails
@@ -46,6 +52,7 @@ import argparse
 import collections
 import fnmatch
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -379,8 +386,8 @@ def scan_text(path, text, conf, words=None, mode=None):
     return [(n, key, shown, cls) for n, seg in segments(mode, lines) for key, shown, cls in hits_in(seg, conf, words)]
 
 
-def git(*args):
-    r = subprocess.run(["git", "-C", ROOT] + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def git(*args, root=None):
+    r = subprocess.run(["git", "-C", root or ROOT] + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return r.returncode, r.stdout
 
 
@@ -467,7 +474,56 @@ def report_over(found, counts, base, over):
                                                                              base.get(key, 0)), flush=True)
 
 
-def gate(against):
+NO_TIP = re.compile(r"0*")
+
+
+def base_rev(event_name, event):
+    """The commit a CI event's baseline is held to, or None when there is none (a push that made its branch)."""
+    if event_name in ("pull_request", "pull_request_target"):
+        return "HEAD^1"
+    if event_name == "push":
+        before = (event or {}).get("before") or ""
+        return None if NO_TIP.fullmatch(before) else before
+    raise Refused("no baseline guard for a %s event" % (event_name or "missing"))
+
+
+def guard(base, rev, root=None, merge=False):
+    """(lines to print, failed): the baseline BASE held to REV's; None holds it to empty."""
+    if rev is None:
+        if base:
+            return ["FAIL public-text-baseline no previous tip to hold %d entries to: the push made the branch"
+                    % len(base)], True
+        return ["NOTE public-text no previous tip; the baseline is empty"], False
+    code, _ = git("rev-parse", "--verify", "--quiet", rev + "^{commit}", root=root)
+    if code:
+        raise Refused("--against-rev %s names no commit here" % rev)
+    if merge:
+        code, out = git("rev-list", "--parents", "-n", "1", "HEAD", root=root)
+        if code or len(out.split()) != 3:
+            raise Refused("this pull request's HEAD is not its merge commit, so HEAD^1 is not its base")
+    code, out = git("show", "%s:%s" % (rev, BASELINE), root=root)
+    if code:
+        return ["NOTE public-text %s has no baseline; the baseline guard starts with the next change" % rev], False
+    lines = ["FAIL public-text-baseline %s total %d > %d at %s" % (d, h, r, rev)
+             for d, h, r in grown(base, read_baseline(out.decode("utf-8", "replace"), rev + ":" + BASELINE))]
+    return lines, bool(lines)
+
+
+def event_rev():
+    """(REV, merge) for --against-event, from the environment GitHub Actions sets."""
+    name = os.environ.get("GITHUB_EVENT_NAME", "")
+    data = {}
+    path = os.environ.get("GITHUB_EVENT_PATH", "")
+    if path:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            raise Refused("GITHUB_EVENT_PATH cannot be read")
+    return base_rev(name, data), name.startswith("pull_request")
+
+
+def gate(against, event=False):
     conf = load_conf()
     base = load_baseline()
     found, files = scan_tree(conf)
@@ -480,17 +536,12 @@ def gate(against):
         print("NOTE public-text stale %s %s (count %d < baseline %d)" % (path, d, counts.get((path, d), 0),
                                                                          base[(path, d)]))
     bad = bool(over)
-    if against:
-        code, _ = git("rev-parse", "--verify", "--quiet", against + "^{commit}")
-        if code:
-            raise Refused("--against-rev %s names no commit here" % against)
-        code, out = git("show", "%s:%s" % (against, BASELINE))
-        if code:
-            print("NOTE public-text %s has no baseline; the baseline guard starts with the next change" % against)
-        else:
-            for d, h, r in grown(base, read_baseline(out.decode("utf-8", "replace"), against + ":" + BASELINE)):
-                print("FAIL public-text-baseline %s total %d > %d at %s" % (d, h, r, against), flush=True)
-                bad = True
+    if event or against is not None:
+        rev, merge = event_rev() if event else (None if NO_TIP.fullmatch(against) else against, False)
+        lines, failed = guard(base, rev, merge=merge)
+        for line in lines:
+            print(line, flush=True)
+        bad = bad or failed
     if bad:
         return 1
     print("PASS public-text %d files, %d known, 0 new" % (files, sum(counts.values())))
@@ -671,12 +722,75 @@ def self_test():
     check(not mine, "this file names something it refuses: %r" % mine[:3])
     other += 3
 
+    check(base_rev("pull_request", {"before": "a" * 40}) == "HEAD^1", "a pull request is held to its base tip")
+    check(base_rev("push", {"before": "0" * 40}) is None and base_rev("push", {}) is None,
+          "a push that made its branch has no previous tip")
+    other += 2
+    other += guard_rows(check, t)
+
     for name in failures:
         print("FAIL public-text-self-test " + name, flush=True)
     if failures:
         return 1
     print("PASS public-text-self-test caught %d, passed %d, other %d" % (caught, passed, other))
     return 0
+
+
+def guard_rows(check, t):
+    """The baseline guard against real commits, in a repository made for it: a push of two commits whose first
+    grows the baseline must fail, though HEAD^1 (its own first commit) already holds the grown baseline."""
+    import shutil
+    import tempfile
+    if not shutil.which("git"):
+        check(False, "git is needed for the baseline guard's rows")
+        return 1
+    rows = 0
+    with tempfile.TemporaryDirectory() as tmp:
+        env = dict(os.environ, HOME=tmp, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
+                   GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+
+        def run(*args):
+            r = subprocess.run(["git", "-C", tmp, "-c", "commit.gpgsign=false", "-c", "core.hooksPath=" + os.devnull]
+                               + list(args), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if r.returncode:
+                raise Refused("git %s: %s" % (args[0], r.stderr.decode("utf-8", "replace").strip()))
+            return r.stdout.decode().strip()
+
+        def commit(files, message):
+            for path, text in files.items():
+                full = os.path.join(tmp, path)
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with open(full, "w", encoding="utf-8") as f:
+                    f.write(text)
+            run("add", "-A")
+            run("commit", "-q", "-m", message)
+            return run("rev-parse", "HEAD")
+
+        word = t("{q}12")
+        run("init", "-q")
+        before = commit({"README.md": "clean\n", BASELINE: HEADER}, "the previous tip")
+        grown_base = {("README.md", short(word)): 1}
+        commit({"README.md": "clean\n%s\n" % word, BASELINE: write_baseline(grown_base)}, "grow the baseline")
+        commit({"NOTES.md": "unrelated\n"}, "a second commit")
+        _, failed = guard(grown_base, base_rev("push", {"before": before}), root=tmp)
+        check(failed, "a two-commit push whose first commit grows the baseline passes the push guard")
+        _, failed = guard(grown_base, "HEAD^1", root=tmp)
+        check(not failed, "HEAD^1 of that push is its own first commit, which already holds the grown baseline")
+        _, failed = guard(grown_base, base_rev("push", {"before": "0" * 40}), root=tmp)
+        check(failed, "a push that made its branch with entries in its baseline passes")
+        _, failed = guard({}, None, root=tmp)
+        check(not failed, "a push that made its branch with an empty baseline fails")
+        rows += 4
+        for rev, merge, name in [("f" * 40, False, "a REV that names no commit"),
+                                 ("HEAD^1", True, "a pull request whose HEAD is no merge commit")]:
+            try:
+                guard(grown_base, rev, root=tmp, merge=merge)
+                check(False, "the guard accepted %s" % name)
+            except Refused:
+                pass
+            rows += 1
+    return rows
 
 
 def main():
@@ -689,7 +803,9 @@ def main():
     g.add_argument("--digest", metavar="WORD")
     g.add_argument("--tool-digest", action="store_true")
     p.add_argument("--all", action="store_true", help="with --report: excluded files too")
-    p.add_argument("--against-rev", metavar="REV")
+    g2 = p.add_mutually_exclusive_group()
+    g2.add_argument("--against-rev", metavar="REV")
+    g2.add_argument("--against-event", action="store_true")
     a = p.parse_args()
     try:
         if a.self_test:
@@ -707,7 +823,7 @@ def main():
             return init()
         if a.report:
             return report(a.all)
-        return gate(a.against_rev)
+        return gate(a.against_rev, a.against_event)
     except Refused as e:
         print("FAIL public-text %s" % e, flush=True)
         return 1
