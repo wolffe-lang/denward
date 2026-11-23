@@ -1,0 +1,31 @@
+# The public-text check on every pull request and every push to the default branch, with no label and
+# no tier: tools/check-public-text's self-test, then the check, with the baseline held to the base's
+# (HEAD^1 is the base tip of a pull request's merge commit, and the parent of a pushed commit). This
+# file is the same in every repository of the organization.
+name: public text
+
+on:
+  pull_request:
+  push:
+    branches: [trunk, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-text-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  public-text:
+    name: public text
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+      - name: public text self-test
+        run: python3 -I tools/check-public-text --self-test
+      - name: public text
+        run: python3 -I tools/check-public-text --against-rev HEAD^1
