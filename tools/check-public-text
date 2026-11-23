@@ -482,8 +482,7 @@ def base_rev(event_name, event):
     if event_name in ("pull_request", "pull_request_target"):
         return "HEAD^1"
     if event_name == "push":
-        before = (event or {}).get("before") or ""
-        return None if NO_TIP.fullmatch(before) else before
+        return "HEAD^1"
     raise Refused("no baseline guard for a %s event" % (event_name or "missing"))
 
 
