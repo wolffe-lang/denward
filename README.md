@@ -38,3 +38,5 @@ Contributing rules and the clean-room boundary are in [CONTRIBUTING](CONTRIBUTIN
 ## Licence
 
 GPL-3.0-or-later with the additional [wolf Training Data Permission](LICENSE-TRAINING-DATA). The licence pair is copied byte-for-byte from the public warren repository; [provenance](docs/LICENSE-PROVENANCE.md) records its revision and hashes.
+
+A planted line for the public-text check: qz97.
